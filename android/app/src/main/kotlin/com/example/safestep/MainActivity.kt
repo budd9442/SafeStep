@@ -13,7 +13,6 @@ import android.graphics.Color
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.embedding.android.FlutterActivity
-import android.content.IntentFilter
 import com.example.safestep.FakeCallUtils
 
 class MainActivity : FlutterActivity() {
@@ -22,24 +21,24 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "triggerFakeCall") {
-                val callerName = call.argument<String>("callerName") ?: "Unknown"
-                val callerNumber = call.argument<String>("callerNumber") ?: "1234567890"
-                val audioPath = call.argument<String>("audioPath") ?: ""
-                FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
-                result.success(null)
-            }
-        }
-        // Add a channel for saving fake call prefs from Flutter
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.safestep/prefs").setMethodCallHandler { call, result ->
-            if (call.method == "saveFakeCallPrefs") {
-                val prefs = getSharedPreferences("fake_call_prefs", Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putString("callerName", call.argument<String>("callerName"))
-                    .putString("callerNumber", call.argument<String>("callerNumber"))
-                    .putString("audioAsset", call.argument<String>("audioAsset"))
-                    .apply()
-                result.success(null)
+            when (call.method) {
+                "triggerFakeCall" -> {
+                    val callerName = call.argument<String>("callerName") ?: "Unknown"
+                    val callerNumber = call.argument<String>("callerNumber") ?: "1234567890"
+                    val audioPath = call.argument<String>("audioPath") ?: ""
+                    FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
+                    result.success(null)
+                }
+                "saveFakeCallPrefs" -> {
+                    val prefs = getSharedPreferences("fake_call_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("callerName", call.argument<String>("callerName"))
+                        .putString("callerNumber", call.argument<String>("callerNumber"))
+                        .putString("audioAsset", call.argument<String>("audioAsset"))
+                        .apply()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
         }
     }
@@ -64,40 +63,9 @@ class MainActivity : FlutterActivity() {
             val callerNumber = prefs.getString("callerNumber", "1234567890") ?: "1234567890"
             val audioAsset = prefs.getString("audioAsset", "") ?: ""
             val audioPath = audioAsset
-            window.decorView.postDelayed({
-                FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
-                finish()
-            }, 500)
+            FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
+            finish()
             return
         }
-    }
-
-    private fun registerFakePhoneAccount(context: Context) {
-        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-        val handle = PhoneAccountHandle(
-            ComponentName(context, FakeCallConnectionService::class.java),
-            "fake_call_account"
-        )
-        val account = PhoneAccount.builder(handle, "Fake Call")
-            .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
-            .setHighlightColor(Color.GREEN)
-            .build()
-        telecomManager.registerPhoneAccount(account)
-    }
-
-    private fun promptEnablePhoneAccount(context: Context) {
-        val intent = Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        context.startActivity(intent)
-    }
-
-    private fun isPhoneAccountEnabled(context: Context): Boolean {
-        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-        val handle = PhoneAccountHandle(
-            ComponentName(context, FakeCallConnectionService::class.java),
-            "fake_call_account"
-        )
-        val account = telecomManager.getPhoneAccount(handle)
-        return account != null && account.isEnabled
     }
 }

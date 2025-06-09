@@ -12,49 +12,33 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.safestep.FakeCallUtils
 
 class ShakeDetectionService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
-    private var accel = 0f
-    private var accelCurrent = 0f
     private var accelLast = 0f
     private var shakeTimestamp: Long = 0
-    private val SHAKE_MAGNITUDE_THRESHOLD = 13f // Set a fixed threshold for shake detection
+    private val SHAKE_MAGNITUDE_THRESHOLD = 13f
     private val SHAKE_DEBOUNCE_MS = 2000L
     private val CHANNEL_ID = "shake_detection_service"
     private val NOTIFICATION_ID = 2001
     private var lastNotificationTime = 0L
     private val NOTIFICATION_INTERVAL_MS = 2000L
-    private var shakeStartTime: Long = 0L
-    private val SHAKE_MIN_DURATION_MS = 1500L
-    private var isShaking = false
-
-    // For advanced shake logic: keep a short history of deltas and their timestamps
     private val DELTA_HISTORY_SIZE = 10
     private val deltaHistory = FloatArray(DELTA_HISTORY_SIZE)
     private val deltaTimeHistory = LongArray(DELTA_HISTORY_SIZE)
     private var deltaHistoryIndex = 0
-
-    // --- Fake call trigger state ---
     private var isFakeCallActive = false
-    private var fakeCallAccepted = false
-    private var fakeCallRejected = false
 
     override fun onCreate() {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
-        accel = 10f
-        accelCurrent = SensorManager.GRAVITY_EARTH
         accelLast = SensorManager.GRAVITY_EARTH
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Shake detection active"))
-
-        // Register broadcast receiver for fake call actions
         val filter = android.content.IntentFilter().apply {
             addAction("com.example.safestep.FAKE_CALL_ACCEPTED")
             addAction("com.example.safestep.FAKE_CALL_REJECTED")
@@ -68,12 +52,8 @@ class ShakeDetectionService : Service(), SensorEventListener {
         unregisterReceiver(fakeCallActionReceiver)
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
@@ -83,24 +63,17 @@ class ShakeDetectionService : Service(), SensorEventListener {
             val accelCurrent = Math.sqrt((x * x + y * y + z * z).toDouble()).toFloat()
             val delta = Math.abs(accelCurrent - accelLast)
             accelLast = accelCurrent
-
             val now = System.currentTimeMillis()
-
-            // Store delta and timestamp in history
             deltaHistory[deltaHistoryIndex] = delta
             deltaTimeHistory[deltaHistoryIndex] = now
             deltaHistoryIndex = (deltaHistoryIndex + 1) % DELTA_HISTORY_SIZE
-
-            // Only show notification if delta > 4
-            // if (delta > 4f && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
-            //     lastNotificationTime = now
-            //     showEventNotification(
-            //         "Accel: x=%.2f y=%.2f z=%.2f".format(x, y, z),
-            //         "delta=%.2f, thresh=4.5".format(delta)
-            //     )
-            // }
-
-            // --- Shake logic: trigger if delta > 4.5 and two deltas > 4.5 in 1.5s ---
+            if (delta > 4f && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
+                lastNotificationTime = now
+                showEventNotification(
+                    "Shake detection active",
+                    "delta=%.2f, thresh=4.5".format(delta)
+                )
+            }
             var count = 0
             for (i in 0 until DELTA_HISTORY_SIZE) {
                 if (now - deltaTimeHistory[i] <= 1500L && deltaHistory[i] > 4.5f) {
@@ -113,17 +86,12 @@ class ShakeDetectionService : Service(), SensorEventListener {
                     onShakeDetected()
                 }
             }
-            // --- End shake logic ---
         }
     }
 
     private fun onShakeDetected() {
-        Log.d("SafeStepDebug", "Shake detected! Starting fake call.")
         if (!isFakeCallActive) {
             isFakeCallActive = true
-            fakeCallAccepted = false
-            fakeCallRejected = false
-            // Directly call FakeCallUtils.triggerFakeCall with last-used prefs
             val prefs = getSharedPreferences("fake_call_prefs", Context.MODE_PRIVATE)
             val callerName = prefs.getString("callerName", "Unknown") ?: "Unknown"
             val callerNumber = prefs.getString("callerNumber", "1234567890") ?: "1234567890"
@@ -133,20 +101,10 @@ class ShakeDetectionService : Service(), SensorEventListener {
         }
     }
 
-    // Listen for fake call accept/reject events (from MainActivity or Flutter)
-    // BroadcastReceiver to handle fake call accept/reject
     private val fakeCallActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.safestep.FAKE_CALL_ACCEPTED") {
-                fakeCallAccepted = true
+            if (intent?.action == "com.example.safestep.FAKE_CALL_ACCEPTED" || intent?.action == "com.example.safestep.FAKE_CALL_REJECTED") {
                 isFakeCallActive = false
-                showEventNotification("Fake Call Accepted", "User accepted the fake call.")
-            } else if (intent?.action == "com.example.safestep.FAKE_CALL_REJECTED") {
-                fakeCallRejected = true
-                isFakeCallActive = false
-                // End the call (cut it)
-                val endIntent = Intent("com.example.safestep.END_FAKE_CALL")
-                sendBroadcast(endIntent)
             }
         }
     }

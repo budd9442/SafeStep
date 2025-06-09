@@ -30,12 +30,10 @@ class FakeCallConnectionService : ConnectionService() {
             override fun onAnswer() {
                 setActive()
                 playSelectedAudio()
-                // Notify shake service: call accepted
                 val intent = android.content.Intent("com.example.safestep.FAKE_CALL_ACCEPTED")
                 sendBroadcast(intent)
             }
             override fun onReject() {
-                // Called when the user rejects the call from the incoming call UI
                 setDisconnected(DisconnectCause(DisconnectCause.REJECTED))
                 stopAudio()
                 destroy()
@@ -43,7 +41,6 @@ class FakeCallConnectionService : ConnectionService() {
                 sendBroadcast(intent)
             }
             override fun onDisconnect() {
-                // Called when the call is ended (either after answer or after reject)
                 setDisconnected(DisconnectCause(DisconnectCause.LOCAL))
                 stopAudio()
                 destroy()
@@ -57,12 +54,8 @@ class FakeCallConnectionService : ConnectionService() {
 
     private fun playSelectedAudio() {
         stopAudio()
-        val path = currentAudioPath ?: run {
-            android.util.Log.e("FakeCall", "No audio path provided!")
-            return
-        }
+        val path = currentAudioPath ?: return
         var resolvedPath = path
-        // If the path is an asset, copy it to cache so native can read it
         if (!File(path).exists() && path.startsWith("assets/")) {
             try {
                 val cacheFile = File(cacheDir, File(path).name)
@@ -75,39 +68,21 @@ class FakeCallConnectionService : ConnectionService() {
                     }
                 }
                 resolvedPath = cacheFile.absolutePath
-            } catch (e: Exception) {
-                android.util.Log.e("FakeCall", "Failed to copy asset to cache: ${e.message}", e)
-            }
+            } catch (_: Exception) {}
         }
-        android.util.Log.i("FakeCall", "Attempting to play audio from path: $resolvedPath")
         try {
             val file = File(resolvedPath)
-            android.util.Log.i("FakeCall", "File exists: ${file.exists()} | Size: ${if (file.exists()) file.length() else 0}")
             if (file.exists()) {
                 mediaPlayer = MediaPlayer().apply {
                     setAudioStreamType(android.media.AudioManager.STREAM_VOICE_CALL)
                     setDataSource(file.absolutePath)
-                    setOnPreparedListener {
-                        android.util.Log.i("FakeCall", "MediaPlayer prepared, starting playback.")
-                        start() 
-                    }
-                    setOnCompletionListener { 
-                        android.util.Log.i("FakeCall", "MediaPlayer completed playback.")
-                        stopAudio() 
-                    }
-                    setOnErrorListener { mp, what, extra ->
-                        android.util.Log.e("FakeCall", "MediaPlayer error: what=$what, extra=$extra")
-                        stopAudio()
-                        true
-                    }
+                    setOnPreparedListener { start() }
+                    setOnCompletionListener { stopAudio() }
+                    setOnErrorListener { _, _, _ -> stopAudio(); true }
                     prepareAsync()
                 }
-            } else {
-                android.util.Log.e("FakeCall", "Audio file not found: $resolvedPath")
             }
-        } catch (e: Exception) {
-            android.util.Log.e("FakeCall", "Exception during audio playback: ${e.message}", e)
-        }
+        } catch (_: Exception) {}
     }
 
     private fun stopAudio() {

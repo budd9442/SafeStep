@@ -53,6 +53,10 @@ dependencies:
   sensors_plus: ^6.1.1
   file_picker: ^10.1.9
   fl_chart: ^1.0.0
+  flutter_animate: ^4.5.2
+  google_fonts: ^6.2.1
+  flutter_chat_bubble: ^2.0.2
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -84,6 +88,7 @@ flutter:
     - assets/ringtone.mp3
     - assets/model.tflite
     - assets/activity_labels.json
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
