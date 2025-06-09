@@ -16,8 +16,6 @@ import android.content.IntentFilter
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.safestep/fakecall"
-    private val POWER_CHANNEL = "com.example.safestep/powerbutton"
-    private var powerButtonMethodChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -29,29 +27,6 @@ class MainActivity : FlutterActivity() {
                 triggerFakeCall(this, callerName, callerNumber, audioPath)
                 result.success(null)
             }
-        }
-        powerButtonMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, POWER_CHANNEL)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // Start VolumeButtonService for background volume button detection
-        val serviceIntent = Intent(this, VolumeButtonService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-        // Handle intent if app is launched from service
-        if (intent?.getBooleanExtra("trigger_fake_call", false) == true) {
-            powerButtonMethodChannel?.invokeMethod("triggerFakeCallFromNative", null)
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        if (intent.getBooleanExtra("trigger_fake_call", false)) {
-            powerButtonMethodChannel?.invokeMethod("triggerFakeCallFromNative", null)
         }
     }
 

@@ -416,6 +416,34 @@ class _FakeCallViewState extends State<FakeCallView> {
                         onPressed: _isCalling ? null : _simulateCall,
                         label: const Text('Simulate Fake Call'),
                       ),
+                      const SizedBox(height: 14),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.bug_report, color: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
+                        onPressed: _isCalling
+                            ? null
+                            : () async {
+                                // Hardcoded test values for debug
+                                setState(() => _isCalling = true);
+                                if (Platform.isAndroid) {
+                                  await _ensurePhoneNumberPermission();
+                                  await triggerFakeCallSystem(
+                                    callerName: 'Test Caller',
+                                    callerNumber: '5551234567',
+                                    audioAsset: '',
+                                  );
+                                } else {
+                                  _showFakeCallDialog();
+                                }
+                                setState(() => _isCalling = false);
+                              },
+                        label: const Text('Test Native Fake Call'),
+                      ),
                     ],
                   ),
                 ),

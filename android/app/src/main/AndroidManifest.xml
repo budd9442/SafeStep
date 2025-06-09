@@ -51,6 +51,7 @@
                 <action android:name="android.telecom.ConnectionService" />
             </intent-filter>
         </service>
+        <!-- Removed all hardware button detection services and receivers (VolumeButtonService, PowerButtonReceiver, AccessibilityService) as part of cleanup. -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
