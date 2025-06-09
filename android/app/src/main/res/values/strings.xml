@@ -1,0 +1,3 @@
+<resources>
+    <!-- Removed accessibility_service_description as part of hardware button detection cleanup. -->
+</resources>

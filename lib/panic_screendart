@@ -1,0 +1,144 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:awesome_ripple_animation/awesome_ripple_animation.dart';
+
+class TenSecondPanicScreen extends StatefulWidget {
+  const TenSecondPanicScreen({super.key});
+
+  @override
+  State<TenSecondPanicScreen> createState() => _TenSecondPanicScreenState();
+}
+
+class _TenSecondPanicScreenState extends State<TenSecondPanicScreen> {
+  late Timer _timer;
+  int _countdown = 15;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdown > 1) {
+        setState(() => _countdown--);
+      } else {
+        _timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          children: [
+            const SizedBox(height: 140),
+            RippleAnimation(
+              key: UniqueKey(),
+              repeat: true,
+              duration: const Duration(milliseconds: 900),
+              ripplesCount: 3,
+              color: const Color(0xFF8F5FE8),
+              minRadius: 100,
+              size: const Size(170, 170),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: const Color(0xFF8F5FE8),
+                child: Text(
+                  '$_countdown',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 80,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 100),
+            const Text(
+              'KEEP CALM!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins',
+                color: Color(0xFF8F5FE8),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Within 10 seconds, your close contacts will be alerted of your whereabouts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Poppins',
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 60),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Press the button below to stop SOS alert.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 50),
+              child: ElevatedButton(
+                onPressed: () {
+                  _timer.cancel();
+                  Navigator.of(context).pop();
+                  // showDialog(
+                  //   context: context,
+                  //   builder: (context) => AlertDialog(
+                  //     title: const Text('Location Permission Required'),
+                  //     content: const Text('Please enable location permissions in your device settings to use this feature.'),
+                  //     actions: [
+                  //       TextButton(
+                  //         onPressed: () => Navigator.of(context).pop(),
+                  //         child: const Text('OK'),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // );
+                },
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: const Color(0xFF8F5FE8),
+                  minimumSize: const Size(200, 70),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                ),
+                child: const Text(
+                  'STOP SENDING SOS ALERT',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
