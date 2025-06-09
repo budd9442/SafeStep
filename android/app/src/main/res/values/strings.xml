@@ -1,3 +1,4 @@
 <resources>
     <!-- Removed accessibility_service_description as part of hardware button detection cleanup. -->
+    <string name="accessibility_service_description">Accessibility service for volume button detection (legacy, safe to remove)</string>
 </resources>

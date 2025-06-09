@@ -25,14 +25,25 @@ class FakeCallConnectionService : ConnectionService() {
         val extras = request?.extras
         currentCallerName = extras?.getString("callerName") ?: "Unknown"
         currentCallerNumber = extras?.getString("callerNumber") ?: ""
-        // Only use "audioPath"; asset-to-cache is always handled by Flutter
         currentAudioPath = extras?.getString("audioPath")
         val connection = object : Connection() {
             override fun onAnswer() {
                 setActive()
                 playSelectedAudio()
+                // Notify shake service: call accepted
+                val intent = android.content.Intent("com.example.safestep.FAKE_CALL_ACCEPTED")
+                sendBroadcast(intent)
+            }
+            override fun onReject() {
+                // Called when the user rejects the call from the incoming call UI
+                setDisconnected(DisconnectCause(DisconnectCause.REJECTED))
+                stopAudio()
+                destroy()
+                val intent = android.content.Intent("com.example.safestep.FAKE_CALL_REJECTED")
+                sendBroadcast(intent)
             }
             override fun onDisconnect() {
+                // Called when the call is ended (either after answer or after reject)
                 setDisconnected(DisconnectCause(DisconnectCause.LOCAL))
                 stopAudio()
                 destroy()
@@ -50,9 +61,27 @@ class FakeCallConnectionService : ConnectionService() {
             android.util.Log.e("FakeCall", "No audio path provided!")
             return
         }
-        android.util.Log.i("FakeCall", "Attempting to play audio from path: $path")
+        var resolvedPath = path
+        // If the path is an asset, copy it to cache so native can read it
+        if (!File(path).exists() && path.startsWith("assets/")) {
+            try {
+                val cacheFile = File(cacheDir, File(path).name)
+                if (!cacheFile.exists()) {
+                    val assetManager = applicationContext.assets
+                    assetManager.open(path.removePrefix("assets/")).use { input ->
+                        FileOutputStream(cacheFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+                resolvedPath = cacheFile.absolutePath
+            } catch (e: Exception) {
+                android.util.Log.e("FakeCall", "Failed to copy asset to cache: ${e.message}", e)
+            }
+        }
+        android.util.Log.i("FakeCall", "Attempting to play audio from path: $resolvedPath")
         try {
-            val file = File(path)
+            val file = File(resolvedPath)
             android.util.Log.i("FakeCall", "File exists: ${file.exists()} | Size: ${if (file.exists()) file.length() else 0}")
             if (file.exists()) {
                 mediaPlayer = MediaPlayer().apply {
@@ -74,7 +103,7 @@ class FakeCallConnectionService : ConnectionService() {
                     prepareAsync()
                 }
             } else {
-                android.util.Log.e("FakeCall", "Audio file not found: $path")
+                android.util.Log.e("FakeCall", "Audio file not found: $resolvedPath")
             }
         } catch (e: Exception) {
             android.util.Log.e("FakeCall", "Exception during audio playback: ${e.message}", e)

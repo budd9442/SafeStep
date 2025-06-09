@@ -51,6 +51,13 @@
                 <action android:name="android.telecom.ConnectionService" />
             </intent-filter>
         </service>
+        <service
+            android:name=".ShakeDetectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice">
+        </service>
+        <!-- Removed VolumeButtonAccessibilityService registration as part of undoing volume button detection. -->
         <!-- Removed all hardware button detection services and receivers (VolumeButtonService, PowerButtonReceiver, AccessibilityService) as part of cleanup. -->
     </application>
     <!-- Required to query activities that can process text, see:

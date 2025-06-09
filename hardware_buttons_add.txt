@@ -1,0 +1,2 @@
+# Add this to your pubspec.yaml under dependencies:
+hardware_buttons: ^2.0.0

@@ -61,6 +61,8 @@ class _FakeCallViewState extends State<FakeCallView> {
     },
   ];
 
+  static const _prefsChannel = MethodChannel('com.example.safestep/prefs');
+
   @override
   void initState() {
     super.initState();
@@ -172,9 +174,18 @@ class _FakeCallViewState extends State<FakeCallView> {
     }
   }
 
+  Future<void> _saveFakeCallPrefs() async {
+    await _prefsChannel.invokeMethod('saveFakeCallPrefs', {
+      'callerName': _callerName,
+      'callerNumber': _callerNumber,
+      'audioAsset': _selectedRecording ?? '',
+    });
+  }
+
   void _simulateCall() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
+    await _saveFakeCallPrefs();
     setState(() => _isCalling = true);
     if (Platform.isAndroid) {
       await _ensurePhoneNumberPermission();
@@ -282,6 +293,7 @@ class _FakeCallViewState extends State<FakeCallView> {
       _callerNumber = template['callerNumber'] ?? '';
       _selectedRecording = template['asset'] ?? '';
     });
+    _saveFakeCallPrefs();
   }
 
   @override
