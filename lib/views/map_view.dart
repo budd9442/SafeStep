@@ -60,7 +60,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   void _centerOnUser() {
     if (widget.currentPosition != null) {
       _programmaticMove = true;
-      _mapController.move(widget.currentPosition!, 18);
+      _mapController.move(widget.currentPosition!, 16); // Hardcoded zoom 16
       setState(() {
         _userMovedMap = false;
       });
@@ -183,7 +183,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     // Center and follow marker if user hasn't moved map
     if (!_userMovedMap && _animatedMarkerPosition != null) {
       _programmaticMove = true;
-      _mapController.move(_animatedMarkerPosition!, 18);
+      // Use current zoom instead of hardcoded 18
+      final currentZoom = _mapController.camera.zoom;
+      _mapController.move(_animatedMarkerPosition!, currentZoom);
       _lastMarkerPosition = _animatedMarkerPosition;
     }
     // Always update the marker when the location changes
@@ -217,7 +219,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: widget.currentPosition ?? LatLng(23.8151, 90.4250),
-                initialZoom: 18,
+                initialZoom: 16,
                 onMapEvent: (event) {
                   // Detach follow mode if the user moves the map (robust: any move not programmatic)
                   if ((event is MapEventMove || event is MapEventMoveEnd)) {
@@ -289,8 +291,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             ),
             if (_userMovedMap)
               Positioned(
-                bottom: 18,
                 right: 18,
+                bottom: 90, // Above nav/chat bar
                 child: FloatingActionButton(
                   mini: true,
                   backgroundColor: Colors.white,

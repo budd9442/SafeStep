@@ -6,6 +6,7 @@ import 'package:safestep/views/map_view.dart';
 import 'package:safestep/views/menu_view.dart';
 import 'package:safestep/views/settings_view.dart';
 import 'package:safestep/widgets/custom_widgets/panic_button_widget.dart';
+import 'package:safestep/views/safe_chat_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<Position>? _positionStreamSubscription;
   bool _featureOpen = false; // Track if a feature is open in MenuView
   List<DangerZone> _dangerZones = [];
+  final TextEditingController _chatController = TextEditingController();
 
   void _onNavTap(int index) {
     setState(() {
@@ -112,6 +114,115 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _openSafeChatWithMessage(String message) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(initialMessage: message),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
+      ),
+    );
+  }
+
+  Widget _buildChatInputBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        color: Colors.transparent,
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(32),
+          color: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _chatController,
+                    style: const TextStyle(fontSize: 16, color: Color(0xFF232946)),
+                    decoration: const InputDecoration(
+                      hintText: 'Whats on your mind...',
+                      hintStyle: TextStyle(color: Color(0xFFB0AEB8)),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty) {
+                        _openSafeChatWithMessage(value.trim());
+                        _chatController.clear();
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8F5FE8).withOpacity(0.18),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 24),
+                    splashRadius: 24,
+                    onPressed: () {
+                      final value = _chatController.text.trim();
+                      if (value.isNotEmpty) {
+                        _openSafeChatWithMessage(value);
+                        _chatController.clear();
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedChatBar() {
+    final show = _currentIndex == null;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          sizeFactor: animation,
+          axis: Axis.vertical,
+          child: child,
+        ),
+      ),
+      child: show ? _buildChatInputBar() : const SizedBox.shrink(key: ValueKey('emptyChatBar')),
+    );
+  }
+
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
@@ -194,9 +305,15 @@ class _HomeScreenState extends State<HomeScreen> {
               left: 0,
               right: 0,
               bottom: 0,
-              child: CustomBottomNavigationBar(
-                currentIndex: _currentIndex,
-                onTap: _onNavTap,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomBottomNavigationBar(
+                    currentIndex: _currentIndex,
+                    onTap: _onNavTap,
+                  ),
+                  _buildAnimatedChatBar(),
+                ],
               ),
             ),
           ],

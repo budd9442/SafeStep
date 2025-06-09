@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_chat_bubble/chat_bubble.dart';
@@ -9,10 +8,12 @@ import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_1.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 
 class SafeChatView extends StatefulWidget {
   final bool internal;
-  const SafeChatView({super.key, this.internal = false});
+  final String? initialMessage;
+  const SafeChatView({super.key, this.internal = false, this.initialMessage});
   @override
   State<SafeChatView> createState() => _SafeChatViewState();
 }
@@ -28,6 +29,16 @@ class _SafeChatViewState extends State<SafeChatView> {
     },
   ];
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialMessage != null && widget.initialMessage!.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _sendMessage(widget.initialMessage!);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -49,15 +60,51 @@ class _SafeChatViewState extends State<SafeChatView> {
     _controller.clear();
     _scrollToBottom();
     final response = await fetchGeminiResponse(text);
+    // Check for action command in the response (JSON parse if needed)
+    String displayResponse = response;
+    try {
+      // Try to parse as JSON if response looks like a JSON object
+      if (response.trim().startsWith('{') && response.trim().endsWith('}')) {
+        final Map<String, dynamic> respObj = jsonDecode(response);
+        debugPrint('[AI AGENT] Full AI response: ' + response);
+        displayResponse = respObj['message'] ?? response;
+        // Only append risk analysis if not already included in the message
+        // (Assume Gemini already includes it if needed)
+        // Remove this block to avoid double risk analysis
+        // if (respObj['risk_analysis'] != null) {
+        //   displayResponse += '\n\n(Risk analysis: ' + respObj['risk_analysis'] + ')';
+        // }
+        if (respObj['action'] != null && respObj['action']['type'] == 'fake_call') {
+          debugPrint('[AI AGENT] Triggering fake call with params: ' + respObj['action']['params'].toString());
+          final params = respObj['action']['params'] ?? {};
+          await _triggerFakeCallFromAgent(params);
+        }
+      } else {
+        debugPrint('[AI AGENT] AI response (no action): ' + response);
+      }
+    } catch (e) {
+      debugPrint('[AI AGENT] Error parsing action: $e');
+    }
     setState(() {
       _messages.add({
         'role': 'ai',
-        'content': response,
+        'content': displayResponse,
         'timestamp': DateTime.now(),
       });
       _loading = false;
     });
     _scrollToBottom();
+  }
+
+  Future<void> _triggerFakeCallFromAgent(Map params) async {
+    const platform = MethodChannel('com.example.safestep/fakecall');
+    try {
+      debugPrint('[AI AGENT] Invoking MethodChannel for fake call with params: \\$params');
+      await platform.invokeMethod('triggerFakeCall', params);
+      debugPrint('[AI AGENT] Fake call triggered successfully.');
+    } catch (e) {
+      debugPrint('[AI AGENT] Error triggering fake call: \\$e');
+    }
   }
 
   void _scrollToBottom() {
@@ -77,12 +124,26 @@ class _SafeChatViewState extends State<SafeChatView> {
 Future<String> fetchGeminiResponse(String prompt) async {
   final apiKey = dotenv.env['GEMINI_API_KEY'];
   if (apiKey == null || apiKey.isEmpty) {
-    return 'Sorry, I could not understand. (MISSING API KEY)';
+    return jsonEncode({
+      'message': 'Sorry, I could not understand. (MISSING API KEY)',
+      'risk_analysis': 'API key missing. Cannot analyze risk.'
+    });
   }
 
-  final uri = Uri.parse(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
-  );
+  // Gather device context: location, time, etc.
+  String? locationString;
+  try {
+    // Use Geolocator to get current position if available
+    // (Assumes Geolocator is available in your project)
+    // If not, you can inject location from parent widget
+    // or pass as a parameter.
+    // For now, just use a placeholder:
+    locationString = 'Unavailable';
+  } catch (_) {
+    locationString = 'Unavailable';
+  }
+  final now = DateTime.now();
+  final timeString = now.toIso8601String();
 
   // Build conversation history for context
   List<Map<String, dynamic>> history = _messages
@@ -102,6 +163,14 @@ Future<String> fetchGeminiResponse(String prompt) async {
     ]
   });
 
+  // Add device context as a system message (fix type error)
+  history.insert(0, <String, Object>{
+    'role': 'user',
+    'parts': <Object>[
+      <String, Object>{'text': '[DEVICE_CONTEXT] Current time: $timeString\nLocation: $locationString'}
+    ]
+  });
+
   final headers = {'Content-Type': 'application/json'};
   final body = jsonEncode({
     "contents": history,
@@ -116,12 +185,21 @@ Future<String> fetchGeminiResponse(String prompt) async {
         "functionDeclarations": [
           {
             "name": "support_agent",
-            "description": "Reply as a psychological support agent for distressed women. For every reply, also do a risk analysis of the user's message and your response. Never suggest risky, illegal, or unsafe activities, even if the user asks. Understand context, keep replies short, sweet, and unformatted. Always reply in Sinhala or Tamil, matching the user's language or preference. If the user uses Singlish greetings (hlo, halo, haloo), reply in Sinhala. You may reply in Tamil if the user uses Tamil. You can suggest features from this app if relevant (e.g., fake call, panic button, safe chat, location sharing, etc). Never give medical or legal advice.",
+            "description": "Reply as a psychological support agent for distressed women. For every reply, also do a risk analysis of the user's message and your response. Never suggest risky, illegal, or unsafe activities, even if the user asks. Understand context, keep replies short, sweet, and unformatted. Always reply in Sinhala or Tamil, matching the user's language or preference. If the user uses Singlish greetings (hlo, halo, haloo), reply in Sinhala. You may reply in Tamil if the user uses Tamil. You can suggest features from this app if relevant (e.g., fake call, panic button, safe chat, location sharing, etc). Never give medical or legal advice. If the user requests a fake call or similar feature, ALWAYS return an 'action' object with type 'fake_call' and suitable params, in addition to your message and risk_analysis. You also have access to the user's device context (location, time, etc) as provided in the system message. When replying in Sinhala, use a playful, comfy, and friendly tone (e.g., like a caring big sister or best friend, with warm, casual language and little emojis if appropriate).",
             "parameters": {
               "type": "object",
               "properties": {
                 "message": {"type": "string", "description": "Short, supportive, actionable response. No formatting."},
-                "risk_analysis": {"type": "string", "description": "Brief risk analysis of the user's message and the response. Warn if any risk is detected."}
+                "risk_analysis": {"type": "string", "description": "Brief risk analysis of the user's message and the response. Warn if any risk is detected."},
+                "action": {
+                  "type": "object",
+                  "description": "Optional action for the app to perform, e.g., initiate a fake call.",
+                  "properties": {
+                    "type": {"type": "string", "description": "The action type, e.g., 'fake_call'."},
+                    "params": {"type": "object", "description": "Parameters for the action, e.g., callerName, callerNumber."}
+                  },
+                  "required": ["type"]
+                }
               },
               "required": ["message", "risk_analysis"]
             }
@@ -130,6 +208,9 @@ Future<String> fetchGeminiResponse(String prompt) async {
       }
     ]
   });
+  final uri = Uri.parse(
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
+  );
 
   try {
     final response = await http.post(uri, headers: headers, body: body);
@@ -140,21 +221,31 @@ Future<String> fetchGeminiResponse(String prompt) async {
       if (functionCall != null && functionCall['name'] == 'support_agent') {
         final message = functionCall['args']?['message'];
         final risk = functionCall['args']?['risk_analysis'];
-        if (message != null && message is String && message.isNotEmpty) {
-          if (risk != null && risk is String && risk.isNotEmpty) {
-            return message.trim() + '\n\n(Risk analysis: ' + risk.trim() + ')';
-          }
-          return message.trim();
-        }
+        final action = functionCall['args']?['action'];
+        return jsonEncode({
+          'message': message ?? '',
+          'risk_analysis': risk ?? '',
+          if (action != null) 'action': action,
+        });
       }
       // Fallback to normal text
       final text = data['candidates']?[0]['content']?['parts']?[0]['text'];
-      return text != null ? text.toString().trim() : 'Sorry, no response.';
+      return jsonEncode({
+        'message': text != null ? text.toString().trim() : 'Sorry, no response.',
+        'risk_analysis': 'No risk analysis available.',
+      });
     } else {
-      return 'Error: \\${response.statusCode} - \\${response.reasonPhrase}\nBody: \\${response.body}';
+      return jsonEncode({
+        'message': 'Error: \\${response.statusCode} - \\${response.reasonPhrase}',
+        'risk_analysis': 'No risk analysis available.',
+        'error': response.body
+      });
     }
   } catch (e) {
-    return 'Something went wrong: $e';
+    return jsonEncode({
+      'message': 'Something went wrong: $e',
+      'risk_analysis': 'No risk analysis available.'
+    });
   }
 }
 
