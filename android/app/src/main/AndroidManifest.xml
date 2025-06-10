@@ -57,6 +57,10 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice">
         </service>
+        <service
+            android:name=".DangerZoneService"
+            android:enabled="true"
+            android:exported="false" />
         <!-- Removed VolumeButtonAccessibilityService registration as part of undoing volume button detection. -->
         <!-- Removed all hardware button detection services and receivers (VolumeButtonService, PowerButtonReceiver, AccessibilityService) as part of cleanup. -->
     </application>

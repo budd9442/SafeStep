@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:vibration/vibration.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MapView extends StatefulWidget {
   final LatLng? currentPosition;
@@ -27,7 +28,18 @@ class MapView extends StatefulWidget {
 class DangerZone {
   final LatLng center;
   final double radius;
-  const DangerZone(this.center, this.radius);
+  final String? id;
+  final String? description;
+  DangerZone(this.center, this.radius, {this.id, this.description});
+
+  factory DangerZone.fromFirestore(Map<String, dynamic> data, {String? id}) {
+    return DangerZone(
+      LatLng((data['lat'] ?? 0.0) * 1.0, (data['lng'] ?? 0.0) * 1.0),
+      (data['radius'] ?? 0.0) * 1.0,
+      id: id,
+      description: data['description'] as String?,
+    );
+  }
 }
 
 class _MapViewState extends State<MapView> with TickerProviderStateMixin {
@@ -41,7 +53,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   // Danger zone state
   late LatLng _dangerZoneCenter;
   late double _dangerZoneRadiusMeters;
-  late List<DangerZone> _dangerZones;
   bool _alertSent = false;
 
   LatLng? _lastMarkerPosition;
@@ -72,19 +83,16 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     super.initState();
     _dangerZoneCenter = widget.dangerZoneCenter ?? const LatLng(6.9754032, 79.9155534);
     _dangerZoneRadiusMeters = widget.dangerZoneRadius ?? 320.0;
-    // Always include the initial danger zone if not already present
-    final initialZone = DangerZone(_dangerZoneCenter, _dangerZoneRadiusMeters);
-    if (widget.dangerZones != null && widget.dangerZones!.isNotEmpty) {
-      // Only add initial if not present
-      final alreadyIncluded = widget.dangerZones!.any((z) => z.center == initialZone.center && z.radius == initialZone.radius);
-      _dangerZones = alreadyIncluded ? List.from(widget.dangerZones!) : [initialZone, ...widget.dangerZones!];
-    } else {
-      _dangerZones = [initialZone];
-    }
     _lastMarkerPosition = widget.currentPosition;
     _animatedMarkerPosition = widget.currentPosition;
     _markerMoveController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _initializeNotifications();
+
+    _dangerZonesStream = FirebaseFirestore.instance
+        .collection('dangerzones')
+        .orderBy('reportedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => DangerZone.fromFirestore(doc.data(), id: doc.id)).toList());
   }
 
   Future<void> _initializeNotifications() async {
@@ -154,21 +162,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     });
   }
 
+  late Stream<List<DangerZone>> _dangerZonesStream;
+
   @override
   void didUpdateWidget(covariant MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Always include the initial danger zone in the list
-    final initialZone = DangerZone(_dangerZoneCenter, _dangerZoneRadiusMeters);
-    if (widget.dangerZones != null && widget.dangerZones!.isNotEmpty) {
-      final alreadyIncluded = widget.dangerZones!.any((z) => z.center == initialZone.center && z.radius == initialZone.radius);
-      setState(() {
-        _dangerZones = alreadyIncluded ? List.from(widget.dangerZones!) : [initialZone, ...widget.dangerZones!];
-      });
-    } else {
-      setState(() {
-        _dangerZones = [initialZone];
-      });
-    }
     // Animate marker if position changed
     if (widget.currentPosition != null && widget.currentPosition != _lastMarkerPosition) {
       if (_lastMarkerPosition != null) {
@@ -207,103 +205,242 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     }
   }
 
+  int? _selectedZoneIndex;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: widget.currentPosition ?? LatLng(23.8151, 90.4250),
-                initialZoom: 16,
-                onMapEvent: (event) {
-                  // Detach follow mode if the user moves the map (robust: any move not programmatic)
-                  if ((event is MapEventMove || event is MapEventMoveEnd)) {
-                    if (_programmaticMove) {
-                      // Reset flag after programmatic move
-                      _programmaticMove = false;
-                    } else if (!_userMovedMap) {
-                      setState(() {
-                        _userMovedMap = true;
-                      });
-                    }
-                  }
-                },
-              ),
+    return StreamBuilder<List<DangerZone>>(
+      stream: _dangerZonesStream,
+      builder: (context, snapshot) {
+        List<DangerZone> zones = snapshot.data ?? [];
+        // Always include the initial danger zone if not present
+        final initialZone = DangerZone(_dangerZoneCenter, _dangerZoneRadiusMeters);
+        if (!zones.any((z) => z.center == initialZone.center && z.radius == initialZone.radius)) {
+          zones = [initialZone, ...zones];
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
               children: [
-                TileLayer(
-                  urlTemplate: _tileUrl,
-                  additionalOptions: <String, String>{},
-                  userAgentPackageName: 'com.example.safestep',
-                  tileProvider: NetworkTileProvider(),
-                ),
-                // Danger zone circles (multiple)
-                ..._dangerZones.map((zone) => CircleLayer(
-                  circles: [
-                    CircleMarker(
-                      point: zone.center,
-                      color: const Color(0x44E0006A),
-                      borderStrokeWidth: 0,
-                      useRadiusInMeter: true,
-                      radius: zone.radius,
-                    ),
-                  ],
-                )),
-                if (_animatedMarkerPosition != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        width: 60.0,
-                        height: 60.0,
-                        point: _animatedMarkerPosition!,
-                        child: const Icon(Icons.location_on, color: Color(0xFF8F5FE8), size: 44),
-                      ),
-                    ],
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: widget.currentPosition ?? LatLng(23.8151, 90.4250),
+                    initialZoom: 16,
+                    onMapEvent: (event) {
+                      // Detach follow mode if the user moves the map (robust: any move not programmatic)
+                      if ((event is MapEventMove || event is MapEventMoveEnd)) {
+                        if (_programmaticMove) {
+                          // Reset flag after programmatic move
+                          _programmaticMove = false;
+                        } else if (!_userMovedMap) {
+                          setState(() {
+                            _userMovedMap = true;
+                          });
+                        }
+                      }
+                    },
                   ),
-                // Demo marker for Yonarli
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      width: 60.0,
-                      height: 60.0,
-                      point: LatLng(23.8151, 90.4250),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF232946),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 8,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.location_pin, color: Colors.white, size: 38),
-                      ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: _tileUrl,
+                      additionalOptions: <String, String>{},
+                      userAgentPackageName: 'com.example.safestep',
+                      tileProvider: NetworkTileProvider(),
                     ),
+                    // Danger zone circles (multiple, from Firestore)
+                    ...zones.map((zone) => CircleLayer(
+                      circles: [
+                        CircleMarker(
+                          point: zone.center,
+                          color: const Color(0x44E0006A),
+                          borderStrokeWidth: 0,
+                          useRadiusInMeter: true,
+                          radius: zone.radius,
+                        ),
+                      ],
+                    )),
+                    // Add a transparent GestureDetector overlay for interactivity
+                    if (zones.isNotEmpty)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapDown: (details) {
+                            final tapPoint = details.localPosition;
+                            final map = _mapController.camera;
+                            final size = (context.findRenderObject() as RenderBox).size;
+                            final x = tapPoint.dx / size.width;
+                            final y = tapPoint.dy / size.height;
+                            final bounds = map.visibleBounds;
+                            final lat = bounds.north + (bounds.south - bounds.north) * y;
+                            final lng = bounds.west + (bounds.east - bounds.west) * x;
+                            final tapped = LatLng(lat, lng);
+                            final Distance distance = const Distance();
+                            // Replace the AlertDialog in the GestureDetector with a custom, modern bottom sheet for danger zone info
+                            for (int i = 0; i < zones.length; i++) {
+                              final zone = zones[i];
+                              if (distance(zone.center, tapped) <= zone.radius) {
+                                showModalBottomSheet(
+                                  context: context,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                  ),
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0006A), size: 32),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              'Danger Zone',
+                                              style: TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFFE0006A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          zone.description ?? 'No description',
+                                          style: const TextStyle(fontSize: 16, color: Color(0xFF232946)),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.circle, size: 16, color: Color(0xFFE0006A)),
+                                            const SizedBox(width: 6),
+                                            Text('Radius: ${zone.radius.toStringAsFixed(0)} m', style: const TextStyle(fontSize: 15)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.location_on, size: 16, color: Color(0xFF8F5FE8)),
+                                            const SizedBox(width: 6),
+                                            Text('Lat: ${zone.center.latitude.toStringAsFixed(5)}'),
+                                            const SizedBox(width: 12),
+                                            Text('Lng: ${zone.center.longitude.toStringAsFixed(5)}'),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text('Close', style: TextStyle(color: Color(0xFFE0006A), fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                                break;
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    if (_animatedMarkerPosition != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            width: 60.0,
+                            height: 60.0,
+                            point: _animatedMarkerPosition!,
+                            child: const Icon(Icons.location_on, color: Color(0xFF8F5FE8), size: 44),
+                          ),
+                        ],
+                      ),
+                    // Demo marker for Yonarli
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          width: 60.0,
+                          height: 60.0,
+                          point: LatLng(23.8151, 90.4250),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF232946),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.location_pin, color: Colors.white, size: 38),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ...zones.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final zone = entry.value;
+                      if (_selectedZoneIndex == i) {
+                        return AnimatedPositioned(
+                          duration: const Duration(milliseconds: 300),
+                          left: null, // Will be positioned by marker
+                          top: null,
+                          child: Center(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: AnimatedOpacity(
+                                opacity: 1.0,
+                                duration: const Duration(milliseconds: 300),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  margin: const EdgeInsets.only(bottom: 60),
+                                  decoration: BoxDecoration(
+                                    color: Colors.pink.shade50,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 8,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    zone.description ?? 'No description',
+                                    style: const TextStyle(color: Color(0xFFE0006A), fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      } else {
+                        return const SizedBox.shrink();
+                      }
+                    }).toList(),
                   ],
                 ),
+                if (_userMovedMap)
+                  Positioned(
+                    right: 18,
+                    bottom: 90, // Above nav/chat bar
+                    child: FloatingActionButton(
+                      mini: true,
+                      backgroundColor: Colors.white,
+                      elevation: 3,
+                      onPressed: _centerOnUser,
+                      child: const Icon(Icons.my_location, color: Color(0xFF8F5FE8)),
+                    ),
+                  ),
               ],
             ),
-            if (_userMovedMap)
-              Positioned(
-                right: 18,
-                bottom: 90, // Above nav/chat bar
-                child: FloatingActionButton(
-                  mini: true,
-                  backgroundColor: Colors.white,
-                  elevation: 3,
-                  onPressed: _centerOnUser,
-                  child: const Icon(Icons.my_location, color: Color(0xFF8F5FE8)),
-                ),
-              ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

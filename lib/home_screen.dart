@@ -7,6 +7,7 @@ import 'package:safestep/views/menu_view.dart';
 import 'package:safestep/views/settings_view.dart';
 import 'package:safestep/widgets/custom_widgets/panic_button_widget.dart';
 import 'package:safestep/views/safe_chat_view.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -254,6 +255,15 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
           centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+              },
+              tooltip: 'Logout',
+            ),
+          ],
         ),
         body: Stack(
           children: [

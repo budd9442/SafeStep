@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReportDangerZoneView extends StatefulWidget {
   final bool internal;
@@ -133,8 +134,21 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
           ),
           const SizedBox(height: 18),
           ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Danger zone reported. Thank you!')));
+            onPressed: () async {
+              final lat = double.tryParse(_latController.text) ?? 0.0;
+              final lng = double.tryParse(_lngController.text) ?? 0.0;
+              final desc = _description?.trim() ?? '';
+              final radius = _radius;
+              await FirebaseFirestore.instance.collection('dangerzones').add({
+                'lat': lat,
+                'lng': lng,
+                'radius': radius,
+                'description': desc,
+                'reportedAt': FieldValue.serverTimestamp(),
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Danger zone reported. Thank you!')),
+              );
               if (!widget.internal) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE0006A)),
