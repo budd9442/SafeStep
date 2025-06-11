@@ -222,7 +222,17 @@ class _ActivityMonitorViewState extends State<ActivityMonitorView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Activity & Distress Monitor')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF8F5FE8)),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('Activity Monitor', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8F5FE8))),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF8F6FC),
       body: Padding(
         padding: const EdgeInsets.all(18.0),
         child: Column(

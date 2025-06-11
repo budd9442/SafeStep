@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AboutUsView extends StatelessWidget {
-  final bool internal;
-  const AboutUsView({super.key, this.internal = false});
+  const AboutUsView({super.key});
   @override
   Widget build(BuildContext context) {
     final content = const Center(
@@ -15,7 +14,21 @@ class AboutUsView extends StatelessWidget {
         ),
       ),
     );
-    if (internal) return content;
-    return Scaffold(appBar: AppBar(title: const Text('About Us')), body: content);
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF8F5FE8)),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('About Us',
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: Color(0xFF8F5FE8))),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF8F6FC),
+      body: content,
+    );
   }
 }

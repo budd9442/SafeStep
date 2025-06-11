@@ -1,14 +1,12 @@
 package com.example.safestep
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -19,7 +17,6 @@ import android.provider.Settings
 import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
-import android.graphics.Color
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.embedding.android.FlutterActivity
@@ -27,15 +24,13 @@ import com.example.safestep.FakeCallUtils
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.safestep/fakecall"
-    private val ALERT_CHANNEL_ID = "danger_zone_alert_channel"
-    private val ALERT_NOTIFICATION_ID = 1001
-    private var isAlerting = false
     private var alertVibrationHandler: Handler? = null
     private var alertVibrationRunnable: Runnable? = null
     private var stopAlertReceiver: BroadcastReceiver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Existing channel for fakecall
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "triggerFakeCall" -> {
@@ -54,12 +49,19 @@ class MainActivity : FlutterActivity() {
                         .apply()
                     result.success(null)
                 }
-                "startDangerZoneAlert" -> {
-                    startDangerZoneAlert()
-                    result.success(null)
-                }
-                "stopDangerZoneAlert" -> {
-                    stopDangerZoneAlert()
+                else -> result.notImplemented()
+            }
+        }
+        // Add support for com.example.safestep/prefs channel for saveFakeCallPrefs
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.safestep/prefs").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "saveFakeCallPrefs" -> {
+                    val prefs = getSharedPreferences("fake_call_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("callerName", call.argument<String>("callerName"))
+                        .putString("callerNumber", call.argument<String>("callerNumber"))
+                        .putString("audioAsset", call.argument<String>("audioAsset"))
+                        .apply()
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -67,82 +69,30 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun startDangerZoneAlert() {
-        if (isAlerting) return
-        isAlerting = true
-        // Vibrate repeatedly
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        alertVibrationHandler = Handler(Looper.getMainLooper())
-        alertVibrationRunnable = object : Runnable {
-            override fun run() {
-                if (isAlerting) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
-                    } else {
-                        @Suppress("DEPRECATION")
-                        vibrator.vibrate(500)
-                    }
-                    alertVibrationHandler?.postDelayed(this, 1000)
-                }
-            }
-        }
-        alertVibrationHandler?.post(alertVibrationRunnable!!)
-        showDangerZoneNotification()
-        registerStopAlertReceiver()
-    }
-
-    private fun stopDangerZoneAlert() {
-        isAlerting = false
-        alertVibrationHandler?.removeCallbacks(alertVibrationRunnable!!)
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(ALERT_NOTIFICATION_ID)
-        unregisterStopAlertReceiver()
-    }
-
-    private fun showDangerZoneNotification() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(ALERT_CHANNEL_ID, "Danger Zone Alerts", NotificationManager.IMPORTANCE_HIGH)
-            channel.description = "Alerts when you are in a danger zone"
-            notificationManager.createNotificationChannel(channel)
-        }
-        val stopIntent = Intent("com.example.safestep.STOP_ALERT")
-        val stopPendingIntent = PendingIntent.getBroadcast(this, 0, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(this, ALERT_CHANNEL_ID)
-            .setContentTitle("Danger Zone Alert")
-            .setContentText("You are in a danger zone! Tap to stop alerting.")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setOngoing(true)
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "Stop Alerting", stopPendingIntent).build())
-            .build()
-        notificationManager.notify(ALERT_NOTIFICATION_ID, notification)
-    }
-
-    private fun registerStopAlertReceiver() {
-        if (stopAlertReceiver != null) return
-        stopAlertReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                stopDangerZoneAlert()
-            }
-        }
-        registerReceiver(stopAlertReceiver, IntentFilter("com.example.safestep.STOP_ALERT"))
-    }
-
-    private fun unregisterStopAlertReceiver() {
-        if (stopAlertReceiver != null) {
-            unregisterReceiver(stopAlertReceiver)
-            stopAlertReceiver = null
-        }
-    }
-
-    override fun onDestroy() {
-        stopDangerZoneAlert()
-        super.onDestroy()
-    }
-
-    // Start ShakeDetectionService from Flutter
+    // Remove notification permission request and notification listener settings
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 1. Request location permission (all-time if possible)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            requestPermissions(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                    android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                ), 1002
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                ), 1002
+            )
+        } else {
+            // If below M, proceed to next step
+            requestPhoneAccountPermissionAndSettings()
+        }
+
         // Start DangerZoneService automatically
         val dangerZoneServiceIntent = Intent(this, DangerZoneService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -171,6 +121,58 @@ class MainActivity : FlutterActivity() {
             FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
             finish()
             return
+        }
+    }
+
+    private fun requestPhoneAccountPermissionAndSettings() {
+        // 2. Request phone-related permissions if needed (e.g., READ_PHONE_STATE, CALL_PHONE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(
+                arrayOf(
+                    android.Manifest.permission.READ_PHONE_STATE,
+                    android.Manifest.permission.CALL_PHONE
+                ), 1003
+            )
+        } else {
+            // If below M, proceed to register phone account and open settings
+            registerPhoneAccountAndOpenSettings()
+        }
+    }
+
+    private fun registerPhoneAccountAndOpenSettings() {
+        // Register as a caller (for fake call)
+        val telecomManager = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        val componentName = ComponentName(this, FakeCallConnectionService::class.java)
+        val phoneAccountHandle = PhoneAccountHandle(componentName, "SafeStepFakeCall")
+        val phoneAccount = PhoneAccount.builder(phoneAccountHandle, "SafeStep Fake Call")
+            .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
+            .setHighlightColor(Color.parseColor("#8F5FE8"))
+            .build()
+        telecomManager.registerPhoneAccount(phoneAccount)
+        // Open the phone account settings UI
+        val intent = Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        startActivity(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Remove notification permission handling
+        if (requestCode == 1002) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // Location permission granted, now request phone account permission and open settings
+                requestPhoneAccountPermissionAndSettings()
+            } else {
+                android.widget.Toast.makeText(this, "Location permission is required for full functionality.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        if (requestCode == 1003) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // Phone account permission granted, register phone account and open settings
+                registerPhoneAccountAndOpenSettings()
+            } else {
+                android.widget.Toast.makeText(this, "Phone permissions are required for fake call feature.", android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 }

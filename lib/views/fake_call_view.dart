@@ -10,8 +10,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:io';
 
 class FakeCallView extends StatefulWidget {
-  final bool internal;
-  const FakeCallView({super.key, this.internal = false});
+  const FakeCallView({super.key});
   @override
   State<FakeCallView> createState() => _FakeCallViewState();
 }
@@ -465,9 +464,13 @@ class _FakeCallViewState extends State<FakeCallView> {
         ),
       ),
     );
-    if (widget.internal) return content;
+    
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: const Text('Fake Call'),
         backgroundColor: const Color(0xFF8F5FE8),
         elevation: 0,

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class ReportDangerZoneView extends StatefulWidget {
-  final bool internal;
   final LatLng? currentPosition;
   final double? initialRadius;
   final Function(LatLng, double)? onDangerZoneChanged;
-  const ReportDangerZoneView({super.key, this.internal = false, this.currentPosition, this.initialRadius, this.onDangerZoneChanged});
+  const ReportDangerZoneView({super.key, this.currentPosition, this.initialRadius, this.onDangerZoneChanged});
   @override
   State<ReportDangerZoneView> createState() => _ReportDangerZoneViewState();
 }
@@ -146,10 +145,10 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
                 'description': desc,
                 'reportedAt': FieldValue.serverTimestamp(),
               });
+              if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Danger zone reported. Thank you!')),
               );
-              if (!widget.internal) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE0006A)),
             child: const Text('Report', style: TextStyle(color: Colors.white)),
@@ -157,7 +156,19 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
         ],
       ),
     );
-    if (widget.internal) return content;
-    return Scaffold(appBar: AppBar(title: const Text('Report Danger Zone')), body: content);
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF8F5FE8)),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('Report Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8F5FE8))),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF8F6FC),
+      body: content,
+    );
   }
 }

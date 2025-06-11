@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:safestep/views/map_view.dart';
 import 'package:safestep/views/menu_view.dart';
 import 'package:safestep/views/settings_view.dart';
-import 'package:safestep/widgets/custom_widgets/panic_button_widget.dart';
+import 'package:safestep/widgets/panic_button_widget.dart';
 import 'package:safestep/views/safe_chat_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -24,6 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<Position>? _positionStreamSubscription;
   bool _featureOpen = false; // Track if a feature is open in MenuView
   List<DangerZone> _dangerZones = [];
+  final GlobalKey<MapViewState> _mapViewKey = GlobalKey<MapViewState>();
+
   final TextEditingController _chatController = TextEditingController();
 
   void _onNavTap(int index) {
@@ -54,12 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
     ).listen(
       (Position pos) {
+        if (!mounted) return;
         setState(() {
           _currentPosition = LatLng(pos.latitude, pos.longitude);
           _loading = false;
         });
       },
       onError: (e) {
+        if (!mounted) return;
         setState(() {
           _error = 'Failed to get location: $e';
           _loading = false;
@@ -118,7 +122,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openSafeChatWithMessage(String message) {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(initialMessage: message),
+        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(initialMessage: message, initialMessageRole: 'user'),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
+      ),
+    );
+  }
+
+  void _openSafeChatWithId(String chatId) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(chatId: chatId),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
           return SlideTransition(position: animation.drive(tween), child: child);
@@ -224,6 +240,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _onProfilePicChanged(String localPath) {
+    _mapViewKey.currentState?.loadProfilePointerMarker(localPath);
+  }
+
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
@@ -282,6 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             // Map background
                             MapView(
+                              key: _mapViewKey,
                               currentPosition: _currentPosition,
                               loading: _loading,
                               error: _error,
@@ -302,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               onAddDangerZone: _addDangerZone,
                               currentPosition: _currentPosition,
                             )
-                          : const SettingsView(),
+                          : SettingsView(onProfilePicChanged: _onProfilePicChanged),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16.0),

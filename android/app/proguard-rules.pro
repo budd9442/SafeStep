@@ -7,11 +7,14 @@
 -keep class org.w3c.dom.bootstrap.** { *; }
 -keep class com.fasterxml.jackson.** { *; }
 -keep class okhttp3.** { *; }
+# TensorFlow Lite GPU
+-keep class org.tensorflow.** { *; }
 -dontwarn java.beans.**
 -dontwarn org.conscrypt.**
 -dontwarn org.w3c.dom.bootstrap.**
 -dontwarn com.fasterxml.jackson.**
 -dontwarn okhttp3.**
+-dontwarn org.tensorflow.**
 # Added to fix R8 missing class warnings (from missing_rules.txt)
 -dontwarn java.beans.ConstructorProperties
 -dontwarn java.beans.Transient

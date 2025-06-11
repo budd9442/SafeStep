@@ -61,8 +61,10 @@
             android:name=".DangerZoneService"
             android:enabled="true"
             android:exported="false" />
+        
         <!-- Removed VolumeButtonAccessibilityService registration as part of undoing volume button detection. -->
         <!-- Removed all hardware button detection services and receivers (VolumeButtonService, PowerButtonReceiver, AccessibilityService) as part of cleanup. -->
+        <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyB7xu3tnYlBBDjR0iNGkMBb8vYnrRiEYBE" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -6,7 +6,7 @@ import 'package:safestep/views/report_danger_zone_view.dart';
 import 'package:safestep/views/about_us_view.dart';
 import 'package:safestep/views/debug_screen.dart';
 import 'package:safestep/views/activity_monitor_view.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MenuView extends StatefulWidget {
   final ValueChanged<bool>? onFeatureOpen;
@@ -38,29 +38,7 @@ class _MenuViewState extends State<MenuView> {
   @override
   Widget build(BuildContext context) {
     if (_selectedFeature != null) {
-      return Column(
-        children: [
-          // Top back button
-          Padding(
-            padding: const EdgeInsets.only(top: 12, left: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: _closeFeature,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _selectedFeature.runtimeType.toString().replaceAll('View', ''),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(child: _selectedFeature!),
-        ],
-      );
+      return _selectedFeature!;
     }
     return Padding(
       padding: const EdgeInsets.all(18.0),
@@ -74,26 +52,25 @@ class _MenuViewState extends State<MenuView> {
             icon: Icons.call,
             label: 'Fake Call',
             color: const Color(0xFF8F5FE8),
-            onTap: () => _openFeature(const FakeCallView(internal: true)),
+            onTap: () => _openFeature(const FakeCallView()),
           ),
           _MenuTile(
             icon: Icons.contacts,
             label: 'Close Contacts',
             color: const Color(0xFF6C63FF),
-            onTap: () => _openFeature(const CloseContactsView(internal: true)),
+            onTap: () => _openFeature(const CloseContactsView()),
           ),
           _MenuTile(
             icon: Icons.chat_bubble_outline,
             label: 'SafeChat',
             color: const Color(0xFFE0006A),
-            onTap: () => _openFeature(const SafeChatView(internal: true)),
+            onTap: () => _openFeature(const SafeChatView()),
           ),
           _MenuTile(
             icon: Icons.report_gmailerrorred,
             label: 'Report Danger',
             color: const Color(0xFF232946),
             onTap: () => _openFeature(ReportDangerZoneView(
-              internal: true,
               currentPosition: widget.currentPosition,
               onDangerZoneChanged: widget.onAddDangerZone,
             )),
@@ -102,7 +79,7 @@ class _MenuViewState extends State<MenuView> {
             icon: Icons.info_outline,
             label: 'About Us',
             color: const Color(0xFF8F5FE8),
-            onTap: () => _openFeature(const AboutUsView(internal: true)),
+            onTap: () => _openFeature(const AboutUsView()),
           ),
           _MenuTile(
             icon: Icons.bug_report,

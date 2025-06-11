@@ -3,8 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CloseContactsView extends StatefulWidget {
-  final bool internal;
-  const CloseContactsView({super.key, this.internal = false});
+  const CloseContactsView({super.key});
   @override
   State<CloseContactsView> createState() => _CloseContactsViewState();
 }
@@ -214,16 +213,19 @@ class _CloseContactsViewState extends State<CloseContactsView> {
         ),
       ],
     );
-    if (widget.internal) return content;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Close Contacts'),
-        backgroundColor: const Color(0xFF7B3FA0),
-        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF8F5FE8)),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('Close Contacts', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8F5FE8))),
+        centerTitle: true,
+        backgroundColor: Colors.white,
         elevation: 0,
       ),
-      body: content,
       backgroundColor: const Color(0xFFF8F6FC),
+      body: content,
     );
   }
 }
