@@ -356,7 +356,7 @@ class _SafeChatViewState extends State<SafeChatView> {
                     ),
                     const SizedBox(width: 8),
                     ChoiceChip(
-                      label: const Text('Yonali mode'),
+                      label: const Text('Test mode'),
                       selected: tempMode == 'yonali',
                       onSelected: (v) => setState(() => tempMode = 'yonali'),
                       selectedColor: Color(0xFF8F5FE8).withOpacity(0.15),
