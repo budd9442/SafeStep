@@ -8,6 +8,7 @@ import 'package:safestep/views/settings_view.dart';
 import 'package:safestep/widgets/panic_button_widget.dart';
 import 'package:safestep/views/safe_chat_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<Position>? _positionStreamSubscription;
   bool _featureOpen = false; // Track if a feature is open in MenuView
   List<DangerZone> _dangerZones = [];
+  StreamSubscription<QuerySnapshot>? _dangerZoneSubscription;
   final GlobalKey<MapViewState> _mapViewKey = GlobalKey<MapViewState>();
 
   final TextEditingController _chatController = TextEditingController();
@@ -49,6 +51,28 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _determinePosition();
     _listenToPositionStream();
+    _listenToDangerZones();
+  }
+
+  void _listenToDangerZones() {
+    // Listen to Firestore for live updates
+    _dangerZoneSubscription = FirebaseFirestore.instance
+        .collection('danger_zones')
+        .snapshots()
+        .listen((snapshot) {
+      final zones = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return DangerZone(
+          LatLng((data['lat'] ?? 0.0) * 1.0, (data['lng'] ?? 0.0) * 1.0),
+          (data['radius'] ?? 0.0) * 1.0,
+          id: doc.id,
+          description: data['description'] as String?,
+        );
+      }).toList();
+      setState(() {
+        _dangerZones = zones;
+      });
+    });
   }
 
   void _listenToPositionStream() {
@@ -113,10 +137,26 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _addDangerZone(LatLng center, double radius) {
+  void _addDangerZone(LatLng center, double radius, {String? description}) {
     setState(() {
-      _dangerZones.add(DangerZone(center, radius));
+      _dangerZones.add(DangerZone(center, radius, description: description));
     });
+  }
+
+  void _onDangerZoneTap(DangerZone zone) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Danger Zone'),
+        content: Text(zone.description ?? 'No description.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openSafeChatWithMessage(String message) {
@@ -247,6 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _dangerZoneSubscription?.cancel();
     super.dispose();
   }
 
@@ -307,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               loading: _loading,
                               error: _error,
                               dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
+                              onDangerZoneTap: _onDangerZoneTap,
                             ),
                             // Overlay ShareLocationCard on top of map
                             Positioned(
@@ -394,7 +436,7 @@ class ShareLocationCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     _TinyContactAvatar(icon: Icons.person, color: Color(0xFF6C63FF)),
                     const SizedBox(width: 4),
-                    _TinyContactAvatar(icon: Icons.person, color: Color(0xFFE0006A)),
+                    _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
                   ],
                 ),
               ],
@@ -474,13 +516,36 @@ void _showShareLocationSheet(BuildContext context) {
             const SizedBox(height: 18),
             SizedBox(
               height: 90,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _ContactAvatar(name: 'Faria', image: 'assets/faria.jpg', selected: true),
-                  _ContactAvatar(name: 'Binita', image: 'assets/binita.jpg', selected: true),
-                  _ContactAvatar(name: 'Trisha', image: 'assets/trisha.jpg', selected: true),
-                ],
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser?.uid)
+                    .collection('contacts')
+                    .orderBy('createdAt', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final contacts = snapshot.data!.docs;
+                  if (contacts.isEmpty) {
+                    return const Center(child: Text('No contacts found'));
+                  }
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: contacts.length,
+                    separatorBuilder: (context, i) => const SizedBox(width: 12),
+                    itemBuilder: (context, i) {
+                      final name = contacts[i]['name'] ?? '';
+                      // No image available from Firebase, so pass empty string
+                      return _ContactAvatar(
+                        name: name,
+                        image: '',
+                        selected: false,
+                      );
+                    },
+                  );
+                },
               ),
             ),
             const SizedBox(height: 18),
@@ -498,7 +563,7 @@ void _showShareLocationSheet(BuildContext context) {
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE0006A),
+                  backgroundColor: const Color(0xFF8F5FE8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -518,8 +583,18 @@ class _ContactAvatar extends StatelessWidget {
   final bool selected;
   const _ContactAvatar({required this.name, required this.image, this.selected = false});
 
+  Color _getColorForName(String name) {
+    // Use a hash of the name to pick a color from the primaries
+    final colors = Colors.primaries;
+    final hash = name.isNotEmpty ? name.codeUnits.reduce((a, b) => a + b) : 0;
+    return colors[hash % colors.length].shade400;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = image.isNotEmpty;
+    final String initial = name.isNotEmpty ? name.trim()[0].toUpperCase() : '';
+    final Color? bgColor = hasImage ? null : _getColorForName(name);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Column(
@@ -528,7 +603,18 @@ class _ContactAvatar extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 30,
-                backgroundImage: AssetImage(image),
+                backgroundColor: bgColor,
+                backgroundImage: hasImage ? AssetImage(image) : null,
+                child: !hasImage
+                    ? Text(
+                        initial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                        ),
+                      )
+                    : null,
               ),
               if (selected)
                 Positioned(
@@ -567,7 +653,7 @@ class _DurationRadio extends StatelessWidget {
           value: value,
           groupValue: selected ? value : null,
           onChanged: (_) {},
-          activeColor: const Color(0xFFE0006A),
+          activeColor: const Color(0xFF8F5FE8),
         ),
         Text(label, style: TextStyle(fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
       ],

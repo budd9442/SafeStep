@@ -67,11 +67,11 @@ class ShakeDetectionService : Service(), SensorEventListener {
             deltaHistory[deltaHistoryIndex] = delta
             deltaTimeHistory[deltaHistoryIndex] = now
             deltaHistoryIndex = (deltaHistoryIndex + 1) % DELTA_HISTORY_SIZE
-            if (delta > 4f && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
+            if (delta > 7f && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
                 lastNotificationTime = now
                 showEventNotification(
                     "Shake detection active",
-                    "delta=%.2f, thresh=4.5".format(delta)
+                    "delta=%.2f, thresh=7".format(delta)
                 )
             }
             var count = 0

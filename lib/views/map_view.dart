@@ -14,6 +14,7 @@ class MapView extends StatefulWidget {
   final LatLng? dangerZoneCenter;
   final double? dangerZoneRadius;
   final List<DangerZone>? dangerZones;
+  final void Function(DangerZone)? onDangerZoneTap;
   const MapView({
     super.key,
     required this.currentPosition,
@@ -22,6 +23,7 @@ class MapView extends StatefulWidget {
     this.dangerZoneCenter,
     this.dangerZoneRadius,
     this.dangerZones,
+    this.onDangerZoneTap,
   });
 
   // Use this key to control MapViewState from outside
@@ -182,11 +184,13 @@ class MapViewState extends State<MapView> {
         FirebaseAuth.instance.currentUser?.uid != oldWidget.currentPosition?.hashCode.toString()) {
       _loadProfilePointerMarkerWithFallback();
     }
-    _updateDangerZones();
+    setState(() {
+      _updateDangerZones();
+    });
   }
 
   void _updateDangerZones() {
-    final zones = widget.dangerZones ?? [DangerZone(_dangerZoneCenter, _dangerZoneRadiusMeters)];
+    final zones = widget.dangerZones ?? [];
     _dangerZoneCircles = zones.map((zone) => Circle(
       circleId: CircleId(zone.id ?? zone.center.toString()),
       center: zone.center,
@@ -194,6 +198,12 @@ class MapViewState extends State<MapView> {
       fillColor: const Color(0x44E0006A),
       strokeColor: Colors.transparent,
       strokeWidth: 0,
+      consumeTapEvents: true,
+      onTap: () {
+        if (widget.onDangerZoneTap != null) {
+          widget.onDangerZoneTap!(zone);
+        }
+      },
     )).toSet();
     _markers = {
       if (widget.currentPosition != null && _profilePointerDescriptor != null)
@@ -203,12 +213,6 @@ class MapViewState extends State<MapView> {
           icon: _profilePointerDescriptor!,
           anchor: const Offset(0.5, 0.5),
         ),
-      Marker(
-        markerId: const MarkerId('yonarli'),
-        position: const LatLng(23.8151, 90.4250),
-        icon: BitmapDescriptor.defaultMarkerWithHue(276.0),
-        anchor: const Offset(0.5, 0.5),
-      ),
     };
   }
 
