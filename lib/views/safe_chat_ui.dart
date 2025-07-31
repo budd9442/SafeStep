@@ -4,9 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_chat_bubble/chat_bubble.dart';
-import 'package:flutter_chat_bubble/bubble_type.dart';
-import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_1.dart';
 
 /// UI-only widgets for SafeChatView: session selector, chat bubbles, input bar, app bar, background.
 /// All logic/state is handled in safe_chat_view.dart (controller).
@@ -122,29 +119,73 @@ class SafeChatUI {
               ).animate().fade(duration: isLast ? 350.ms : 0.ms).scale(duration: isLast ? 350.ms : 0.ms),
             ),
           Flexible(
-            child: ChatBubble(
-              clipper: ChatBubbleClipper1(type: isUser ? BubbleType.sendBubble : BubbleType.receiverBubble),
-              alignment: isUser ? Alignment.topRight : Alignment.topLeft,
+            child: Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
-              backGroundColor: isUser ? const Color(0xFF8F5FE8) : Colors.white,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isUser ? const Color(0xFF8F5FE8) : Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isUser ? 20 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   Text(
                     msg['content'] ?? '',
                     style: GoogleFonts.lato(
-                      color: isUser ? Colors.white : Colors.black87,
+                      color: isUser ? Colors.white : const Color(0xFF1A1A2E),
                       fontSize: 16,
+                      height: 1.4,
                     ),
                   ).animate().fade(duration: isLast ? 350.ms : 0.ms).slideX(begin: isUser ? 0.2 : -0.2, end: 0, duration: isLast ? 350.ms : 0.ms),
-                  if (showRisk && msg['role'] == 'ai' && msg['risk_analysis'] != null && (msg['risk_analysis'] as String).isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6.0, bottom: 2.0),
-                      child: Text(
-                        'Risk analysis: ${msg['risk_analysis']}',
-                        style: GoogleFonts.lato(fontSize: 12, color: Colors.red[400], fontStyle: FontStyle.italic),
+                  if (showRisk && msg['role'] == 'ai' && msg['risk_analysis'] != null && (msg['risk_analysis'] as String).isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isUser 
+                            ? Colors.white.withOpacity(0.2)
+                            : const Color(0xFFFFF3CD),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isUser 
+                              ? Colors.white.withOpacity(0.3)
+                              : const Color(0xFFFFEAA7),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: isUser ? Colors.white70 : const Color(0xFF856404),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              msg['risk_analysis'],
+                              style: GoogleFonts.lato(
+                                fontSize: 12,
+                                color: isUser ? Colors.white70 : const Color(0xFF856404),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     timeStr,

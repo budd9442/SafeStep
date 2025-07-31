@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _listenToDangerZones() {
     // Listen to Firestore for live updates
     _dangerZoneSubscription = FirebaseFirestore.instance
-        .collection('danger_zones')
+        .collection('dangerzones')
         .snapshots()
         .listen((snapshot) {
       final zones = snapshot.docs.map((doc) {
@@ -69,6 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
           description: data['description'] as String?,
         );
       }).toList();
+       print('Danger zones updated: $zones'); // <-- Add this line
+    
       setState(() {
         _dangerZones = zones;
       });
@@ -331,12 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // Main content
             Column(
               children: [
-                // Only show ShareLocationCard above menu grid (not when feature is open)
-                if (_currentIndex == 0 && !_featureOpen)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ShareLocationCard(onShare: () => _showShareLocationSheet(context)),
-                  ),
+
                 Expanded(
                   child: _currentIndex == null
                       ? Stack(
@@ -350,13 +347,37 @@ class _HomeScreenState extends State<HomeScreen> {
                               dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
                               onDangerZoneTap: _onDangerZoneTap,
                             ),
-                            // Overlay ShareLocationCard on top of map
+                            // Overlay ShareLocationCard or ActiveShareLocationPanel on top of map
                             Positioned(
                               top: 16,
                               left: 16,
                               right: 16,
-                              child: ShareLocationCard(onShare: () => _showShareLocationSheet(context)),
+                              child: StreamBuilder<DocumentSnapshot>(
+                                stream: FirebaseAuth.instance.currentUser == null
+                                    ? null
+                                    : FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                                        .snapshots(),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData || FirebaseAuth.instance.currentUser == null) {
+                                    return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
+                                  }
+                                  final data = snapshot.data!.data() as Map<String, dynamic>?;
+                                  final sharing = data != null && data['sharingLocation'] == true;
+                                  if (sharing) {
+                                    final List contacts = (data['shareLocationContacts'] ?? []) as List;
+                                    return ActiveShareLocationPanel(
+                                      contactIds: contacts.cast<String>(),
+                                    );
+                                  } else {
+                                    return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
+                                  }
+                                },
+                              ),
                             ),
+                          
+
                           ],
                         )
                       : _currentIndex == 0
@@ -392,6 +413,155 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Panel shown when sharing location is active
+class ActiveShareLocationPanel extends StatefulWidget {
+  final List<String> contactIds;
+  const ActiveShareLocationPanel({required this.contactIds, Key? key}) : super(key: key);
+
+  @override
+  State<ActiveShareLocationPanel> createState() => _ActiveShareLocationPanelState();
+}
+
+class _ActiveShareLocationPanelState extends State<ActiveShareLocationPanel> {
+  bool _stopping = false;
+
+  Future<void> _stopSharing() async {
+    setState(() => _stopping = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'sharingLocation': false,
+        'shareLocationContacts': [],
+        'shareLocationDuration': null,
+        'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    if (mounted) setState(() => _stopping = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: CircleAvatar(
+              radius: 30,
+              backgroundColor: const Color(0xFF8F5FE8),
+              child: const Icon(Icons.location_on, color: Colors.white, size: 32),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Sharing location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Color(0xFF232946))),
+                const SizedBox(height: 6),
+                _ActiveContactAvatars(contactIds: widget.contactIds),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 18.0),
+            child: ElevatedButton(
+              onPressed: _stopping ? null : _stopSharing,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8F5FE8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                elevation: 0,
+              ),
+              child: _stopping
+                  ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Stop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Widget to show avatars for shared contacts
+class _ActiveContactAvatars extends StatelessWidget {
+  final List<String> contactIds;
+  const _ActiveContactAvatars({required this.contactIds});
+
+  String _getSafeImageField(DocumentSnapshot doc) {
+    try {
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data != null && data.containsKey('image')) {
+        return data['image'] ?? '';
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (contactIds.isEmpty) {
+      return Row(
+        children: [
+          _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
+        ],
+      );
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
+    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('contacts')
+          .where(FieldPath.documentId, whereIn: contactIds.length > 10 ? contactIds.sublist(0, 10) : contactIds)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
+        }
+        final docs = snapshot.data!.docs;
+        return Row(
+          children: [
+            for (final doc in docs)
+              Padding(
+                padding: const EdgeInsets.only(right: 4.0),
+                child: _ContactAvatar(
+                  name: doc['name'] ?? '',
+                  image: _getSafeImageField(doc),
+                  selected: false,
+                ),
+              ),
+            if (docs.length < contactIds.length)
+              for (int i = docs.length; i < contactIds.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4.0),
+                  child: _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
+                ),
+          ],
+        );
+      },
     );
   }
 }
@@ -484,97 +654,162 @@ void _showShareLocationSheet(BuildContext context) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 32,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Contacts to Share Location',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF8F5FE8)),
-                hintText: 'Search',
-                filled: true,
-                fillColor: const Color(0xFFF6F6F6),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 90,
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(FirebaseAuth.instance.currentUser?.uid)
-                    .collection('contacts')
-                    .orderBy('createdAt', descending: true)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final contacts = snapshot.data!.docs;
-                  if (contacts.isEmpty) {
-                    return const Center(child: Text('No contacts found'));
-                  }
-                  return ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: contacts.length,
-                    separatorBuilder: (context, i) => const SizedBox(width: 12),
-                    itemBuilder: (context, i) {
-                      final name = contacts[i]['name'] ?? '';
-                      // No image available from Firebase, so pass empty string
-                      return _ContactAvatar(
-                        name: name,
-                        image: '',
-                        selected: false,
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _DurationRadio(label: 'Always', value: 0),
-                _DurationRadio(label: '1 hour', value: 1, selected: true),
-                _DurationRadio(label: '8 hours', value: 2),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8F5FE8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
-              ),
-            ),
-          ],
-        ),
-      );
+      return _ShareLocationSheetContent();
     },
   );
+}
+
+class _ShareLocationSheetContent extends StatefulWidget {
+  @override
+  State<_ShareLocationSheetContent> createState() => _ShareLocationSheetContentState();
+}
+
+class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> {
+  Set<String> _selectedContactIds = {};
+  String _search = '';
+  int _selectedDuration = 1; // 0: Always, 1: 1 hour, 2: 8 hours
+  bool _sharingLocation = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 32,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Select Contacts to Share Location',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF8F5FE8)),
+              hintText: 'Search',
+              filled: true,
+              fillColor: const Color(0xFFF6F6F6),
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onChanged: (val) => setState(() => _search = val.trim().toLowerCase()),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 110,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                  .collection('contacts')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final contacts = snapshot.data!.docs;
+                final filtered = _search.isEmpty
+                    ? contacts
+                    : contacts.where((c) => (c['name'] ?? '').toString().toLowerCase().contains(_search)).toList();
+                if (filtered.isEmpty) {
+                  return const Center(child: Text('No contacts found'));
+                }
+                return ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: filtered.length,
+                  separatorBuilder: (context, i) => const SizedBox(width: 12),
+                  itemBuilder: (context, i) {
+                    final doc = filtered[i];
+                    final name = doc['name'] ?? '';
+                    final id = doc.id;
+                    final selected = _selectedContactIds.contains(id);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (selected) {
+                            _selectedContactIds.remove(id);
+                          } else {
+                            _selectedContactIds.add(id);
+                          }
+                        });
+                      },
+                      child: _ContactAvatar(
+                        name: name,
+                        image: '',
+                        selected: selected,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _DurationRadio(
+                label: 'Always',
+                value: 0,
+                selected: _selectedDuration == 0,
+                onChanged: (v) => setState(() => _selectedDuration = v!),
+              ),
+              _DurationRadio(
+                label: '1 hour',
+                value: 1,
+                selected: _selectedDuration == 1,
+                onChanged: (v) => setState(() => _selectedDuration = v!),
+              ),
+              _DurationRadio(
+                label: '8 hours',
+                value: 2,
+                selected: _selectedDuration == 2,
+                onChanged: (v) => setState(() => _selectedDuration = v!),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _selectedContactIds.isNotEmpty && !_sharingLocation ? () async {
+                setState(() => _sharingLocation = true);
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  final durationMap = {0: 'always', 1: '1h', 2: '8h'};
+                  await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                    'shareLocationContacts': _selectedContactIds.toList(),
+                    'shareLocationDuration': durationMap[_selectedDuration],
+                    'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
+                    'sharingLocation': true,
+                  }, SetOptions(merge: true));
+                }
+                if (mounted) Navigator.pop(context);
+                setState(() => _sharingLocation = false);
+              } : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8F5FE8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: _sharingLocation
+                  ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ContactAvatar extends StatelessWidget {
@@ -584,7 +819,6 @@ class _ContactAvatar extends StatelessWidget {
   const _ContactAvatar({required this.name, required this.image, this.selected = false});
 
   Color _getColorForName(String name) {
-    // Use a hash of the name to pick a color from the primaries
     final colors = Colors.primaries;
     final hash = name.isNotEmpty ? name.codeUnits.reduce((a, b) => a + b) : 0;
     return colors[hash % colors.length].shade400;
@@ -600,21 +834,32 @@ class _ContactAvatar extends StatelessWidget {
       child: Column(
         children: [
           Stack(
+            alignment: Alignment.center,
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: bgColor,
-                backgroundImage: hasImage ? AssetImage(image) : null,
-                child: !hasImage
-                    ? Text(
-                        initial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                        ),
-                      )
-                    : null,
+              Container(
+                width: 58, // 2*radius + border width*2
+                height: 58,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: selected
+                      ? Border.all(color: const Color(0xFF4CD964), width: 3)
+                      : Border.all(color: Colors.transparent, width: 3),
+                ),
+                child: CircleAvatar(
+                  radius: 26,
+                  backgroundColor: bgColor,
+                  backgroundImage: hasImage ? AssetImage(image) : null,
+                  child: !hasImage
+                      ? Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        )
+                      : null,
+                ),
               ),
               if (selected)
                 Positioned(
@@ -631,8 +876,8 @@ class _ContactAvatar extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
         ],
       ),
     );
@@ -643,7 +888,8 @@ class _DurationRadio extends StatelessWidget {
   final String label;
   final int value;
   final bool selected;
-  const _DurationRadio({required this.label, required this.value, this.selected = false});
+  final ValueChanged<int?>? onChanged;
+  const _DurationRadio({required this.label, required this.value, this.selected = false, this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -652,7 +898,7 @@ class _DurationRadio extends StatelessWidget {
         Radio<int>(
           value: value,
           groupValue: selected ? value : null,
-          onChanged: (_) {},
+          onChanged: onChanged,
           activeColor: const Color(0xFF8F5FE8),
         ),
         Text(label, style: TextStyle(fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
