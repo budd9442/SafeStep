@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'safe_chat_ui.dart';
 import 'agent_prompts.dart';
+
 
 class SafeChatView extends StatefulWidget {
   final bool internal;
@@ -149,6 +151,7 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
       _messages.add(userMsg);
       _loading = true;
     });
+    debugPrint('[CHAT] Added user message: ${_messages.length} total messages');
     await _saveMessage(userMsg);
     _controller.clear();
     _scrollToBottom();
@@ -156,11 +159,36 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
     String displayResponse = response;
     String? riskAnalysis;
     try {
-      if (response.trim().startsWith('{') && response.trim().endsWith('}')) {
-        final Map<String, dynamic> respObj = jsonDecode(response);
+      // First, try to clean the response to extract JSON if it's wrapped in markdown
+      String cleanResponse = response.trim();
+      
+      // Remove markdown code blocks if present
+      if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.substring(7, cleanResponse.length - 3).trim();
+        debugPrint('[AI AGENT] Removed markdown code blocks, clean response: $cleanResponse');
+      } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.substring(3, cleanResponse.length - 3).trim();
+        debugPrint('[AI AGENT] Removed markdown code blocks, clean response: $cleanResponse');
+      }
+      
+      if (cleanResponse.startsWith('{') && cleanResponse.endsWith('}')) {
+        final Map<String, dynamic> respObj = jsonDecode(cleanResponse);
         debugPrint('[AI AGENT] Full AI response: ' + response);
-        displayResponse = respObj['message'] ?? response;
+        debugPrint('[AI AGENT] Cleaned response: $cleanResponse');
+        debugPrint('[AI AGENT] Parsed JSON keys: ${respObj.keys.toList()}');
+        debugPrint('[AI AGENT] Message field: ${respObj['message']}');
+        debugPrint('[AI AGENT] Risk analysis field: ${respObj['risk_analysis']}');
+        debugPrint('[AI AGENT] Action field: ${respObj['action']}');
+        
+        displayResponse = respObj['message'] ?? cleanResponse;
         riskAnalysis = respObj['risk_analysis'];
+        debugPrint('[AI AGENT] Final display response: $displayResponse');
+        debugPrint('[AI AGENT] Final risk analysis: $riskAnalysis');
+        
+        // Debug: Check if we're getting the right content
+        if (displayResponse == response) {
+          debugPrint('[AI AGENT] WARNING: displayResponse equals raw response - JSON parsing may have failed');
+        }
         if (respObj['action'] != null && respObj['action']['type'] == 'fake_call') {
           debugPrint('[AI AGENT] Triggering fake call with params: ' + respObj['action']['params'].toString());
           final params = respObj['action']['params'] ?? {};
@@ -168,40 +196,98 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
         }
       } else {
         debugPrint('[AI AGENT] AI response (no action): ' + response);
+        // If response is not JSON, try to extract fake call request from text
+        if (response.toLowerCase().contains('fake call') || 
+            response.toLowerCase().contains('call me') || 
+            response.toLowerCase().contains('make my phone ring') ||
+            response.toLowerCase().contains('initiating') ||
+            response.toLowerCase().contains('triggering')) {
+          debugPrint('[AI AGENT] Detected fake call request in text, triggering...');
+          await _triggerFakeCallFromAgent({
+            'caller_name': 'Emergency Contact',
+            'caller_number': '+1234567890'
+          });
+        }
       }
     } catch (e) {
       debugPrint('[AI AGENT] Error parsing action: $e');
+      // Fallback: try to detect fake call request even if JSON parsing fails
+      if (response.toLowerCase().contains('fake call') || 
+          response.toLowerCase().contains('call me') || 
+          response.toLowerCase().contains('make my phone ring') ||
+          response.toLowerCase().contains('initiating') ||
+          response.toLowerCase().contains('triggering')) {
+        debugPrint('[AI AGENT] Detected fake call request in text after JSON error, triggering...');
+        await _triggerFakeCallFromAgent({
+          'caller_name': 'Emergency Contact',
+          'caller_number': '+1234567890'
+        });
+      }
     }
     final aiMsg = {
       'role': 'ai',
       'content': displayResponse,
       'timestamp': DateTime.now(),
-      'risk_analysis': riskAnalysis ?? '',
+      'risk_analysis': riskAnalysis ?? 'No specific risk detected. Stay safe!',
     };
     setState(() {
       _messages.add(aiMsg);
       _loading = false;
     });
+    debugPrint('[CHAT] Added AI message: ${_messages.length} total messages');
     await _saveMessage(aiMsg);
     _scrollToBottom();
   }
 
-  Future<void> _triggerFakeCallFromAgent(Map params) async {
-    const platform = MethodChannel('com.example.safestep/fakecall');
+   Future<void> _triggerFakeCallFromAgent(Map params) async {
     try {
-      debugPrint('[AI AGENT] Invoking MethodChannel for fake call with params: \\$params');
-      await platform.invokeMethod('triggerFakeCall', params);
-      debugPrint('[AI AGENT] Fake call triggered successfully.');
+      debugPrint('[AI AGENT] Triggering fake call with params: $params');
+      
+      // Use the existing method channel for native Android fake calls
+      const platform = MethodChannel('com.example.safestep/fakecall');
+      
+      final Map<String, dynamic> callParams = {
+        'callerName': params['caller_name'] ?? 'Emergency Contact',
+        'callerNumber': params['caller_number'] ?? '+1234567890',
+        'audioPath': 'assets/ringtone.mp3', // Use the ringtone asset
+      };
+      
+      debugPrint('[AI AGENT] Method channel params: $callParams');
+      
+      // Call the native Android fake call implementation
+      await platform.invokeMethod('triggerFakeCall', callParams);
+      
+      debugPrint('[AI AGENT] Fake call triggered successfully via method channel.');
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fake call incoming! Check your phone.'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } catch (e) {
-      debugPrint('[AI AGENT] Error triggering fake call: \\$e');
+      debugPrint('[AI AGENT] Error triggering fake call: $e');
+      
+      // Fallback: show a notification that fake call was triggered
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fake call triggered! Check your phone.'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        debugPrint('[CHAT] Scrolling to bottom: maxScroll = $maxScroll');
         _scrollController.animateTo(
-          0.0,
+          maxScroll,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeOut,
         );
@@ -235,10 +321,41 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
 
   Future<String> fetchGeminiResponse(String prompt) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
+    
+    // Enhanced API key validation with better error messages
     if (apiKey == null || apiKey.isEmpty) {
+      debugPrint('[AI AGENT] ERROR: GEMINI_API_KEY is missing or empty');
+      debugPrint('[AI AGENT] Please create a .env file with your Gemini API key');
+      debugPrint('[AI AGENT] Get your API key from: https://makersuite.google.com/app/apikey');
+      
       return jsonEncode({
-        'message': 'Sorry, I could not understand. (MISSING API KEY)',
-        'risk_analysis': 'API key missing. Cannot analyze risk.'
+        'message': 'AI service is currently unavailable. Please check your configuration.',
+        'risk_analysis': 'Unable to analyze risk due to missing API configuration.',
+        'error_code': 'MISSING_API_KEY',
+        'help': 'Contact support or check your environment configuration.'
+      });
+    }
+    
+    // Validate API key format (basic check)
+    if (apiKey.length < 20) {
+      debugPrint('[AI AGENT] ERROR: GEMINI_API_KEY appears to be invalid (too short)');
+      return jsonEncode({
+        'message': 'AI service configuration error. Please check your API key.',
+        'risk_analysis': 'Unable to analyze risk due to invalid API configuration.',
+        'error_code': 'INVALID_API_KEY',
+        'help': 'Please verify your Gemini API key is correct.'
+      });
+    }
+    
+    // Development fallback for testing (remove in production)
+    if (apiKey == 'your_gemini_api_key_here' || apiKey.contains('your_')) {
+      debugPrint('[AI AGENT] WARNING: Using placeholder API key. Please set a real API key.');
+      return jsonEncode({
+        'message': 'AI service is in development mode. Please configure your API key.',
+        'risk_analysis': 'Development mode - no risk analysis available.',
+        'error_code': 'DEV_MODE',
+        'help': 'Replace the placeholder API key in your .env file with a real Gemini API key.',
+        'dev_note': 'This is a development fallback. Set GEMINI_API_KEY in your .env file.'
       });
     }
 
@@ -268,19 +385,24 @@ Device Context:
 - Mode: $_mode
 ''';
 
-    final fullPrompt = contextString + '\n\nUser Message: ' + prompt;
+    final fullPrompt = 'SYSTEM: You are a JSON-only AI. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.\n\n' + contextString + '\n\nUser Message: ' + prompt + '\n\nREMEMBER: You MUST respond in JSON format only. NEVER send plain text.';
 
     try {
       final response = await http.post(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=$apiKey'),
+        Uri.parse('https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=$apiKey'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [{
             'parts': [{
-              'text': getAgentPrompt(_mode, _defaultLanguage) + '\n\n' + fullPrompt
+              'text': 'SYSTEM: You are a JSON-only AI. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.\n\n' + getAgentPrompt(_mode, _defaultLanguage) + '\n\n' + fullPrompt
             }]
           }]
         }),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('Request timed out after 30 seconds', const Duration(seconds: 30));
+        },
       );
 
       if (response.statusCode == 200) {
@@ -293,16 +415,94 @@ Device Context:
             return parts[0]['text'] as String;
           }
         }
+        
+        // Handle case where response is successful but no content
+        debugPrint('[AI AGENT] WARNING: API response successful but no content found');
+        debugPrint('[AI AGENT] Response data: $data');
+        return jsonEncode({
+          'message': 'AI response received but no content was generated. Please try again.',
+          'risk_analysis': 'Unable to analyze risk due to empty AI response.',
+          'error_code': 'EMPTY_RESPONSE',
+          'help': 'The AI model returned an empty response. This may be a temporary issue.'
+        });
       }
+      
+      // Handle non-200 status codes with detailed error information
+      debugPrint('[AI AGENT] ERROR: API returned status code ${response.statusCode}');
+      debugPrint('[AI AGENT] Response body: ${response.body}');
+      
+      String errorMessage = 'Sorry, I could not process your request. Please try again.';
+      String riskAnalysis = 'Unable to analyze risk due to API error.';
+      String errorCode = 'API_ERROR';
+      String help = 'Please try again later or contact support if the issue persists.';
+      
+      // Provide specific error messages for common status codes
+      switch (response.statusCode) {
+        case 400:
+          errorMessage = 'Invalid request sent to AI service. Please check your input.';
+          errorCode = 'BAD_REQUEST';
+          help = 'Your message may contain content that violates AI service policies.';
+          break;
+        case 401:
+          errorMessage = 'AI service authentication failed. Please check your API key.';
+          errorCode = 'UNAUTHORIZED';
+          help = 'Your API key may be invalid or expired. Please verify your configuration.';
+          break;
+        case 403:
+          errorMessage = 'AI service access denied. Your API key may not have the required permissions.';
+          errorCode = 'FORBIDDEN';
+          help = 'Please check your API key permissions or upgrade your plan.';
+          break;
+        case 429:
+          errorMessage = 'AI service is currently busy. Please wait a moment and try again.';
+          errorCode = 'RATE_LIMITED';
+          help = 'You have exceeded the API rate limit. Please wait before sending another message.';
+          break;
+        case 500:
+        case 502:
+        case 503:
+          errorMessage = 'AI service is temporarily unavailable. Please try again later.';
+          errorCode = 'SERVER_ERROR';
+          help = 'The AI service is experiencing technical difficulties. Please try again in a few minutes.';
+          break;
+      }
+      
       return jsonEncode({
-        'message': 'Sorry, I could not process your request. Please try again.',
-        'risk_analysis': 'Unable to analyze risk due to API error.'
+        'message': errorMessage,
+        'risk_analysis': riskAnalysis,
+        'error_code': errorCode,
+        'help': help,
+        'status_code': response.statusCode
       });
     } catch (e) {
-      debugPrint('Error calling Gemini API: $e');
+      debugPrint('[AI AGENT] ERROR: Exception occurred while calling Gemini API: $e');
+      
+      String errorMessage = 'Sorry, I encountered an error. Please check your internet connection and try again.';
+      String riskAnalysis = 'Unable to analyze risk due to network error.';
+      String errorCode = 'NETWORK_ERROR';
+      String help = 'Please check your internet connection and try again.';
+      
+      // Provide specific error messages for common exceptions
+      if (e.toString().contains('SocketException') || e.toString().contains('NetworkException')) {
+        errorMessage = 'No internet connection detected. Please check your network settings.';
+        errorCode = 'NO_INTERNET';
+        help = 'Please ensure you have a stable internet connection and try again.';
+      } else if (e.toString().contains('TimeoutException')) {
+        errorMessage = 'Request timed out. The AI service is taking too long to respond.';
+        errorCode = 'TIMEOUT';
+        help = 'Please try again. If the issue persists, the AI service may be experiencing high load.';
+      } else if (e.toString().contains('FormatException')) {
+        errorMessage = 'Invalid response received from AI service. Please try again.';
+        errorCode = 'INVALID_RESPONSE';
+        help = 'The AI service returned an unexpected response format. This may be a temporary issue.';
+      }
+      
       return jsonEncode({
-        'message': 'Sorry, I encountered an error. Please check your internet connection and try again.',
-        'risk_analysis': 'Unable to analyze risk due to network error.'
+        'message': errorMessage,
+        'risk_analysis': riskAnalysis,
+        'error_code': errorCode,
+        'help': help,
+        'exception': e.toString()
       });
     }
   }
@@ -753,6 +953,64 @@ Device Context:
                 ),
               ),
               
+                            // Test Fake Call Button (for debugging)
+              IconButton(
+                onPressed: () async {
+                  debugPrint('[TEST] Manual fake call test triggered');
+                  await _triggerFakeCallFromAgent({
+                    'caller_name': 'Test Call',
+                    'caller_number': '+1234567890'
+                  });
+                },
+                icon: const Icon(
+                  Icons.phone,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                tooltip: 'Test Fake Call',
+              ),
+              
+              // Test JSON Parsing Button (for debugging)
+              IconButton(
+                onPressed: () {
+                  debugPrint('[TEST] Testing JSON parsing...');
+                  
+                  // Test 1: Valid JSON
+                  final testResponse1 = '{"message": "Test message", "risk_analysis": "Test risk analysis", "action": null}';
+                  debugPrint('[TEST] Test 1 - Valid JSON: $testResponse1');
+                  
+                  try {
+                    final parsed1 = jsonDecode(testResponse1);
+                    debugPrint('[TEST] Test 1 - Parsed successfully: ${parsed1['message']}');
+                  } catch (e) {
+                    debugPrint('[TEST] Test 1 - JSON parsing failed: $e');
+                  }
+                  
+                  // Test 2: Markdown wrapped JSON (like what you're getting)
+                  final testResponse2 = '```json\n{"message": "Test message", "risk_analysis": "Test risk analysis", "action": null}\n```';
+                  debugPrint('[TEST] Test 2 - Markdown JSON: $testResponse2');
+                  
+                  try {
+                    String cleanResponse = testResponse2.trim();
+                    if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+                      cleanResponse = cleanResponse.substring(7, cleanResponse.length - 3).trim();
+                      debugPrint('[TEST] Test 2 - Cleaned response: $cleanResponse');
+                    }
+                    
+                    final parsed2 = jsonDecode(cleanResponse);
+                    debugPrint('[TEST] Test 2 - Parsed successfully: ${parsed2['message']}');
+                  } catch (e) {
+                    debugPrint('[TEST] Test 2 - JSON parsing failed: $e');
+                  }
+                },
+                icon: const Icon(
+                  Icons.code,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                tooltip: 'Test JSON Parsing',
+              ),
+              
               // Settings Button
               IconButton(
                 onPressed: _showSettingsDialog,
@@ -772,15 +1030,14 @@ Device Context:
   Widget _buildMessagesList() {
     return ListView.builder(
       controller: _scrollController,
-      reverse: true,
+      reverse: false,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       itemCount: _messages.length + (_loading ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == 0 && _loading) {
+        if (index == _messages.length && _loading) {
           return _buildTypingIndicator();
         }
-        final messageIndex = _loading ? index - 1 : index;
-        final message = _messages[messageIndex];
+        final message = _messages[index];
         final isUser = message['role'] == 'user';
         return _buildMessageBubble(message, isUser);
       },

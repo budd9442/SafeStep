@@ -12,6 +12,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.safestep.FakeCallUtils
 
@@ -92,12 +93,37 @@ class ShakeDetectionService : Service(), SensorEventListener {
     private fun onShakeDetected() {
         if (!isFakeCallActive) {
             isFakeCallActive = true
-            val prefs = getSharedPreferences("fake_call_prefs", Context.MODE_PRIVATE)
-            val callerName = prefs.getString("callerName", "Unknown") ?: "Unknown"
-            val callerNumber = prefs.getString("callerNumber", "1234567890") ?: "1234567890"
-            val audioAsset = prefs.getString("audioAsset", "") ?: ""
-            val audioPath = audioAsset
-            FakeCallUtils.triggerFakeCall(applicationContext, callerName, callerNumber, audioPath)
+            // Open SOS screen instead of triggering fake call
+            openSosScreen()
+        }
+    }
+
+    private fun openSosScreen() {
+        try {
+            // Create intent to open the app with SOS screen
+            val intent = Intent(applicationContext, MainActivity::class.java).apply {
+                action = "com.example.safestep.OPEN_SOS_SCREEN"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("open_sos_screen", true)
+            }
+            
+            // Start the activity
+            startActivity(intent)
+            
+            // Show notification that SOS screen was opened
+            showEventNotification(
+                "SOS Screen Opened",
+                "Gesture detected - SOS screen opened"
+            )
+            
+            Log.d("ShakeDetectionService", "SOS screen opened from background service")
+        } catch (e: Exception) {
+            Log.e("ShakeDetectionService", "Error opening SOS screen: ${e.message}")
+            // Fallback: show notification
+            showEventNotification(
+                "Gesture Detected",
+                "SOS screen could not be opened"
+            )
         }
     }
 

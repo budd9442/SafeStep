@@ -186,6 +186,59 @@ class SafeChatUI {
                       ),
                     ),
                   ],
+                  
+                  // Display error information if there's an error
+                  if (msg['role'] == 'ai' && msg['error_code'] != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isUser 
+                            ? Colors.red.withOpacity(0.2)
+                            : const Color(0xFFF8D7DA),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isUser 
+                              ? Colors.red.withOpacity(0.3)
+                              : const Color(0xFFF5C6CB),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 16,
+                                color: isUser ? Colors.red[300] : const Color(0xFF721C24),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Error: ${msg['error_code']}',
+                                style: GoogleFonts.lato(
+                                  fontSize: 12,
+                                  color: isUser ? Colors.red[300] : const Color(0xFF721C24),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (msg['help'] != null && (msg['help'] as String).isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              msg['help'],
+                              style: GoogleFonts.lato(
+                                fontSize: 11,
+                                color: isUser ? Colors.red[200] : const Color(0xFF721C24),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     timeStr,

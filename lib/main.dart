@@ -10,6 +10,21 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await dotenv.load();
+  
+  // Debug: Check if required environment variables are loaded
+  final geminiApiKey = dotenv.env['GEMINI_API_KEY'];
+  if (geminiApiKey == null || geminiApiKey.isEmpty) {
+    debugPrint('⚠️  WARNING: GEMINI_API_KEY is not set in .env file');
+    debugPrint('⚠️  AI agent functionality will not work without this key');
+    debugPrint('⚠️  Please create a .env file with your Gemini API key');
+    debugPrint('⚠️  See SETUP.md for detailed instructions');
+  } else if (geminiApiKey == 'your_gemini_api_key_here' || geminiApiKey.contains('your_')) {
+    debugPrint('⚠️  WARNING: GEMINI_API_KEY appears to be a placeholder');
+    debugPrint('⚠️  Please replace with your actual Gemini API key');
+  } else {
+    debugPrint('✅ GEMINI_API_KEY loaded successfully');
+  }
+  
   runApp(const MyApp());
 }
 

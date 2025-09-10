@@ -9,6 +9,7 @@ import 'package:safestep/widgets/panic_button_widget.dart';
 import 'package:safestep/views/safe_chat_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:safestep/services/sos_navigation_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,6 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _determinePosition();
     _listenToPositionStream();
     _listenToDangerZones();
+    
+    // Initialize SOS navigation service
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SosNavigationService.initialize(context);
+    });
   }
 
   void _listenToDangerZones() {
@@ -290,6 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _positionStreamSubscription?.cancel();
     _dangerZoneSubscription?.cancel();
+    SosNavigationService.dispose();
     super.dispose();
   }
 

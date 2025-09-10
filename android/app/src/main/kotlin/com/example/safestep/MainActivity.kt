@@ -24,6 +24,7 @@ import com.example.safestep.FakeCallUtils
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.safestep/fakecall"
+    private val SOS_CHANNEL = "com.example.safestep/sos"
     private var alertVibrationHandler: Handler? = null
     private var alertVibrationRunnable: Runnable? = null
     private var stopAlertReceiver: BroadcastReceiver? = null
@@ -67,6 +68,17 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        
+        // Add SOS channel for opening SOS screen
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openSosScreen" -> {
+                    // This will be handled by Flutter side
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     // Remove notification permission request and notification listener settings
@@ -103,6 +115,7 @@ class MainActivity : FlutterActivity() {
 
         val shakeIntent = intent
         val isShakeTrigger = shakeIntent?.action == "com.example.safestep.TRIGGER_FAKE_CALL"
+        val isSosTrigger = shakeIntent?.action == "com.example.safestep.OPEN_SOS_SCREEN"
         val startShakeServiceIntent = Intent(this, ShakeDetectionService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(startShakeServiceIntent)
@@ -121,6 +134,13 @@ class MainActivity : FlutterActivity() {
             FakeCallUtils.triggerFakeCall(this, callerName, callerNumber, audioPath)
             finish()
             return
+        }
+        
+        // Handle SOS screen opening from gesture detection
+        if (isSosTrigger) {
+            // Store flag to open SOS screen when Flutter is ready
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("open_sos_screen", true).apply()
         }
     }
 
@@ -172,6 +192,20 @@ class MainActivity : FlutterActivity() {
                 registerPhoneAccountAndOpenSettings()
             } else {
                 android.widget.Toast.makeText(this, "Phone permissions are required for fake call feature.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Check if we need to open SOS screen
+        val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("open_sos_screen", false)) {
+            // Clear the flag
+            prefs.edit().putBoolean("open_sos_screen", false).apply()
+            // Notify Flutter to open SOS screen
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                MethodChannel(messenger, SOS_CHANNEL).invokeMethod("openSosScreen", null)
             }
         }
     }
