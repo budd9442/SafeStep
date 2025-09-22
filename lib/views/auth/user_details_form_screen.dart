@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../home_screen.dart';
 
 class UserDetailsFormScreen extends StatefulWidget {
   final String phoneNumber;
@@ -282,12 +282,26 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
     
     try {
       await _createUser();
-      widget.onComplete?.call();
+      if (mounted) {
+        setState(() { _loading = false; });
+        print('✅ User registration completed, calling onComplete');
+        widget.onComplete?.call();
+        print('✅ onComplete callback called');
+        
+        // Also navigate directly to home screen as backup
+        print('🔄 Navigating directly to home screen');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Failed to create account: ${e.toString()}';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to create account: ${e.toString()}';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -296,22 +310,32 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
     
     try {
       await _createUser();
-      widget.onComplete?.call();
+      if (mounted) {
+        setState(() { _loading = false; });
+        print('✅ User registration completed (skip), calling onComplete');
+        widget.onComplete?.call();
+        print('✅ onComplete callback called (skip)');
+        
+        // Also navigate directly to home screen as backup
+        print('🔄 Navigating directly to home screen (skip)');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Failed to create account: ${e.toString()}';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to create account: ${e.toString()}';
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _createUser() async {
     try {
-      // Create anonymous user first
-      final userCredential = await FirebaseAuth.instance.signInAnonymously();
-      await userCredential.user?.updateDisplayName(_nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'User');
-      
-      // Prepare user data
+      // Create user document in Firestore without Firebase Auth
       final userData = {
         'phoneNumber': widget.phoneNumber,
         'name': _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'User',
@@ -321,14 +345,18 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
         'lastLoginAt': FieldValue.serverTimestamp(),
         'isVerified': true,
         'profileComplete': _nameController.text.trim().isNotEmpty,
+        'isAuthenticated': true,
+        'sessionId': DateTime.now().millisecondsSinceEpoch.toString(),
       };
       
       // Remove null values
       userData.removeWhere((key, value) => value == null);
       
-      // Store user data in Firestore
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid);
+      // Store user data in Firestore with phone number as document ID
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(widget.phoneNumber.replaceAll(RegExp(r'[^\d]'), ''));
       await userDoc.set(userData, SetOptions(merge: true));
+      
+      print('✅ User created successfully');
       
     } catch (e) {
       print('Error creating user: $e');

@@ -7,9 +7,10 @@ import 'package:safestep/views/menu_view.dart';
 import 'package:safestep/views/settings_view.dart';
 import 'package:safestep/widgets/panic_button_widget.dart';
 import 'package:safestep/views/safe_chat_view.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:safestep/services/sos_navigation_service.dart';
+import 'package:safestep/services/local_session.dart';
+import 'package:safestep/views/auth/phone_auth_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _featureOpen = false; // Track if a feature is open in MenuView
   List<DangerZone> _dangerZones = [];
   StreamSubscription<QuerySnapshot>? _dangerZoneSubscription;
+  StreamSubscription<QuerySnapshot>? _inboxSubscription;
   final GlobalKey<MapViewState> _mapViewKey = GlobalKey<MapViewState>();
 
   final TextEditingController _chatController = TextEditingController();
@@ -53,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _determinePosition();
     _listenToPositionStream();
     _listenToDangerZones();
+    _listenToInboxNotifications();
     
     // Channel initialized globally in main.dart
   }
@@ -78,6 +81,55 @@ class _HomeScreenState extends State<HomeScreen> {
         _dangerZones = zones;
       });
     });
+  }
+
+  void _listenToInboxNotifications() async {
+    try {
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isAuthenticated', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isEmpty) return;
+
+      final userDoc = usersQuery.docs.first;
+      _inboxSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(userDoc.id)
+          .collection('inbox')
+          .where('read', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .listen((snapshot) async {
+        for (final doc in snapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final String type = (data['type'] ?? '').toString();
+          if (type == 'share_location') {
+            final String fromName = (data['fromName'] ?? 'Someone').toString();
+            if (!mounted) continue;
+            // Show popup
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Location Share'),
+                content: Text('$fromName is sharing their location with you'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+            // Mark as read
+            await doc.reference.set({'read': true, 'readAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+          }
+        }
+      });
+    } catch (_) {
+      // ignore listener errors
+    }
   }
 
   void _listenToPositionStream() {
@@ -289,10 +341,56 @@ class _HomeScreenState extends State<HomeScreen> {
     _mapViewKey.currentState?.loadProfilePointerMarker(localPath);
   }
 
+  Future<void> _logout() async {
+    try {
+      // Show confirmation dialog
+      final bool? shouldLogout = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Logout'),
+            content: const Text('Are you sure you want to logout?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Logout'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldLogout == true) {
+        // Clear local session
+        await LocalSession.clear();
+
+        // Navigate back to auth screen
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const PhoneAuthScreen()),
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      print('Error during logout: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
     _dangerZoneSubscription?.cancel();
+    _inboxSubscription?.cancel();
     SosNavigationService.dispose();
     super.dispose();
   }
@@ -326,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
-                await FirebaseAuth.instance.signOut();
+                await _logout();
               },
               tooltip: 'Logout',
             ),
@@ -356,18 +454,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               top: 16,
                               left: 16,
                               right: 16,
-                              child: StreamBuilder<DocumentSnapshot>(
-                                stream: FirebaseAuth.instance.currentUser == null
-                                    ? null
-                                    : FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                                        .snapshots(),
+                              child: StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('users')
+                                    .where('isAuthenticated', isEqualTo: true)
+                                    .snapshots(),
                                 builder: (context, snapshot) {
-                                  if (!snapshot.hasData || FirebaseAuth.instance.currentUser == null) {
+                                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                                     return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
                                   }
-                                  final data = snapshot.data!.data() as Map<String, dynamic>?;
+                                  final userDoc = snapshot.data!.docs.first;
+                                  final data = userDoc.data() as Map<String, dynamic>?;
                                   final sharing = data != null && data['sharingLocation'] == true;
                                   if (sharing) {
                                     final List contacts = (data['shareLocationContacts'] ?? []) as List;
@@ -435,15 +532,28 @@ class _ActiveShareLocationPanelState extends State<ActiveShareLocationPanel> {
 
   Future<void> _stopSharing() async {
     setState(() => _stopping = true);
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'sharingLocation': false,
-        'shareLocationContacts': [],
-        'shareLocationDuration': null,
-        'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    
+    try {
+      // Find the authenticated user
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isAuthenticated', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isNotEmpty) {
+        final userDoc = usersQuery.docs.first;
+        await userDoc.reference.set({
+          'sharingLocation': false,
+          'shareLocationContacts': [],
+          'shareLocationDuration': null,
+          'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error stopping location sharing: $e');
     }
+    
     if (mounted) setState(() => _stopping = false);
   }
 
@@ -512,8 +622,12 @@ class _ActiveContactAvatars extends StatelessWidget {
   String _getSafeImageField(DocumentSnapshot doc) {
     try {
       final data = doc.data() as Map<String, dynamic>?;
-      if (data != null && data.containsKey('image')) {
-        return data['image'] ?? '';
+      if (data != null) {
+        // Check for URL-based profile picture fields first
+        final profilePicUrl = data['profilePicUrl'] ?? data['profilePic'] ?? data['image'];
+        if (profilePicUrl != null && profilePicUrl.isNotEmpty) {
+          return profilePicUrl;
+        }
       }
       return '';
     } catch (e) {
@@ -530,17 +644,25 @@ class _ActiveContactAvatars extends StatelessWidget {
         ],
       );
     }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
-    }
+    
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
-          .collection('contacts')
-          .where(FieldPath.documentId, whereIn: contactIds.length > 10 ? contactIds.sublist(0, 10) : contactIds)
-          .snapshots(),
+          .where('isAuthenticated', isEqualTo: true)
+          .limit(1)
+          .snapshots()
+          .asyncExpand((snapshot) {
+            if (snapshot.docs.isEmpty) {
+              return Stream<QuerySnapshot>.empty();
+            }
+            final userDoc = snapshot.docs.first;
+            return FirebaseFirestore.instance
+                .collection('users')
+                .doc(userDoc.id)
+                .collection('contacts')
+                .where(FieldPath.documentId, whereIn: contactIds.length > 10 ? contactIds.sublist(0, 10) : contactIds)
+                .snapshots();
+          }),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
@@ -750,10 +872,21 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser?.uid)
-                  .collection('contacts')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
+                  .where('isAuthenticated', isEqualTo: true)
+                  .limit(1)
+                  .snapshots()
+                  .asyncExpand((snapshot) {
+                    if (snapshot.docs.isEmpty) {
+                      return Stream<QuerySnapshot>.empty();
+                    }
+                    final userDoc = snapshot.docs.first;
+                    return FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(userDoc.id)
+                        .collection('contacts')
+                        .orderBy('createdAt', descending: true)
+                        .snapshots();
+                  }),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -825,16 +958,48 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
             child: ElevatedButton(
               onPressed: _selectedContactIds.isNotEmpty && !_sharingLocation ? () async {
                 setState(() => _sharingLocation = true);
-                final user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  final durationMap = {0: 'always', 1: '1h', 2: '8h'};
-                  await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                    'shareLocationContacts': _selectedContactIds.toList(),
-                    'shareLocationDuration': durationMap[_selectedDuration],
-                    'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
-                    'sharingLocation': true,
-                  }, SetOptions(merge: true));
+                
+                try {
+                  // Find the authenticated user
+                  final usersQuery = await FirebaseFirestore.instance
+                      .collection('users')
+                      .where('isAuthenticated', isEqualTo: true)
+                      .limit(1)
+                      .get();
+
+                  if (usersQuery.docs.isNotEmpty) {
+                    final userDoc = usersQuery.docs.first;
+                    final durationMap = {0: 'always', 1: '1h', 2: '8h'};
+                    await userDoc.reference.set({
+                      'shareLocationContacts': _selectedContactIds.toList(),
+                      'shareLocationDuration': durationMap[_selectedDuration],
+                      'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
+                      'sharingLocation': true,
+                    }, SetOptions(merge: true));
+
+                    // Send inbox notifications to each selected contact
+                    final fromName = (userDoc.data()['name'] ?? 'Someone').toString();
+                    final fromId = userDoc.id;
+                    final contactsCol = FirebaseFirestore.instance.collection('users');
+                    for (final contactId in _selectedContactIds) {
+                      try {
+                        await contactsCol
+                            .doc(contactId)
+                            .collection('inbox')
+                            .add({
+                          'type': 'share_location',
+                          'fromUserId': fromId,
+                          'fromName': fromName,
+                          'createdAt': FieldValue.serverTimestamp(),
+                          'read': false,
+                        });
+                      } catch (_) {}
+                    }
+                  }
+                } catch (e) {
+                  print('Error starting location sharing: $e');
                 }
+                
                 if (mounted) Navigator.pop(context);
                 setState(() => _sharingLocation = false);
               } : null,

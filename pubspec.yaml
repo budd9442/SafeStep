@@ -63,6 +63,7 @@ dependencies:
   firebase_storage: ^12.4.6
   path_provider: ^2.1.5
   http: ^1.1.0
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   flutter_test:

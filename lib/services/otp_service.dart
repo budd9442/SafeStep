@@ -30,46 +30,74 @@ class OTPService {
     required String phoneNumber,
     Map<String, dynamic>? applicationMetaData,
   }) async {
-    try {
-      final formattedPhone = _formatPhoneNumber(phoneNumber);
-      
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/otp/request'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'phoneNumber': formattedPhone,
-          'applicationMetaData': applicationMetaData ?? {
-            'client': 'MOBILEAPP',
-            'device': 'Flutter App',
-            'os': defaultTargetPlatform.name,
-            'appCode': 'SafeStep'
-          }
-        }),
-      ).timeout(_timeout);
+    int retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        final formattedPhone = _formatPhoneNumber(phoneNumber);
+        
+        print('🔄 Attempting OTP request (attempt ${retryCount + 1}/$maxRetries)');
+        print('📱 Phone: $formattedPhone');
+        
+        final response = await http.post(
+          Uri.parse('$_baseUrl/api/otp/request'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Connection': 'keep-alive',
+          },
+          body: jsonEncode({
+            'phoneNumber': formattedPhone,
+            'applicationMetaData': applicationMetaData ?? {
+              'client': 'MOBILEAPP',
+              'device': 'Flutter App',
+              'os': defaultTargetPlatform.name,
+              'appCode': 'SafeStep'
+            }
+          }),
+        ).timeout(_timeout);
 
-      final responseData = jsonDecode(response.body);
+        print('📡 Response status: ${response.statusCode}');
+        print('📄 Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        return OTPResponse.success(
-          reference: responseData['reference'],
-          phoneNumber: responseData['phoneNumber'],
-          expiresIn: responseData['expiresIn'],
-        );
-      } else {
-        return OTPResponse.error(
-          code: responseData['code'] ?? 'UNKNOWN_ERROR',
-          message: responseData['message'] ?? responseData['error'] ?? 'Failed to send OTP',
-        );
+        final responseData = jsonDecode(response.body);
+
+        if (response.statusCode == 200) {
+          print('✅ OTP request successful');
+          return OTPResponse.success(
+            reference: responseData['reference'],
+            phoneNumber: responseData['phoneNumber'],
+            expiresIn: responseData['expiresIn'],
+          );
+        } else {
+          print('❌ OTP request failed: ${responseData['message']}');
+          return OTPResponse.error(
+            code: responseData['code'] ?? 'UNKNOWN_ERROR',
+            message: responseData['message'] ?? responseData['error'] ?? 'Failed to send OTP',
+          );
+        }
+      } catch (e) {
+        retryCount++;
+        print('❌ OTP request error (attempt $retryCount): $e');
+        
+        if (retryCount >= maxRetries) {
+          print('❌ Max retries reached, giving up');
+          return OTPResponse.error(
+            code: 'NETWORK_ERROR',
+            message: 'Network error after $maxRetries attempts: ${e.toString()}',
+          );
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await Future.delayed(Duration(seconds: retryCount * 2));
       }
-    } catch (e) {
-      return OTPResponse.error(
-        code: 'NETWORK_ERROR',
-        message: 'Network error: ${e.toString()}',
-      );
     }
+    
+    return OTPResponse.error(
+      code: 'UNKNOWN_ERROR',
+      message: 'Unexpected error occurred',
+    );
   }
 
   // Verify OTP with custom backend
@@ -77,66 +105,104 @@ class OTPService {
     required String reference,
     required String otp,
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/otp/verify'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'reference': reference,
-          'otp': otp,
-        }),
-      ).timeout(_timeout);
+    int retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        print('🔄 Attempting OTP verification (attempt ${retryCount + 1}/$maxRetries)');
+        print('🔑 Reference: $reference');
+        print('🔢 OTP: $otp');
+        
+        final response = await http.post(
+          Uri.parse('$_baseUrl/api/otp/verify'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Connection': 'keep-alive',
+          },
+          body: jsonEncode({
+            'reference': reference,
+            'otp': otp,
+          }),
+        ).timeout(_timeout);
 
-      final responseData = jsonDecode(response.body);
+        print('📡 Verification response status: ${response.statusCode}');
+        print('📄 Verification response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        return OTPVerificationResponse.success(
-          phoneNumber: responseData['phoneNumber'],
-          verifiedAt: responseData['verifiedAt'],
-          subscriptionStatus: responseData['subscriptionStatus'],
-        );
-      } else {
-        return OTPVerificationResponse.error(
-          code: responseData['code'] ?? 'UNKNOWN_ERROR',
-          message: responseData['message'] ?? responseData['error'] ?? 'Failed to verify OTP',
-          attemptsRemaining: responseData['attemptsRemaining'],
-        );
+        final responseData = jsonDecode(response.body);
+
+        if (response.statusCode == 200) {
+          print('✅ OTP verification successful');
+          return OTPVerificationResponse.success(
+            phoneNumber: responseData['phoneNumber'],
+            verifiedAt: responseData['verifiedAt'],
+            subscriptionStatus: responseData['subscriptionStatus'],
+          );
+        } else {
+          print('❌ OTP verification failed: ${responseData['message']}');
+          return OTPVerificationResponse.error(
+            code: responseData['code'] ?? 'UNKNOWN_ERROR',
+            message: responseData['message'] ?? responseData['error'] ?? 'Failed to verify OTP',
+            attemptsRemaining: responseData['attemptsRemaining'],
+          );
+        }
+      } catch (e) {
+        retryCount++;
+        print('❌ OTP verification error (attempt $retryCount): $e');
+        
+        if (retryCount >= maxRetries) {
+          print('❌ Max retries reached for verification, giving up');
+          return OTPVerificationResponse.error(
+            code: 'NETWORK_ERROR',
+            message: 'Network error after $maxRetries attempts: ${e.toString()}',
+          );
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await Future.delayed(Duration(seconds: retryCount * 2));
       }
-    } catch (e) {
-      return OTPVerificationResponse.error(
-        code: 'NETWORK_ERROR',
-        message: 'Network error: ${e.toString()}',
-      );
     }
+    
+    return OTPVerificationResponse.error(
+      code: 'UNKNOWN_ERROR',
+      message: 'Unexpected error occurred during verification',
+    );
   }
 
   // Check if user exists by phone number
   static Future<UserExistenceResponse> checkUserExists(String phoneNumber) async {
     try {
+      final formattedPhone = _formatPhoneNumber(phoneNumber);
+      print('🔍 Checking user existence for: $phoneNumber (formatted: $formattedPhone)');
+      
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/user/check/$phoneNumber'),
+        Uri.parse('$_baseUrl/api/user/check/$formattedPhone'),
         headers: {
           'Accept': 'application/json',
         },
       ).timeout(_timeout);
 
+      print('📡 User check response status: ${response.statusCode}');
+      print('📄 User check response body: ${response.body}');
+
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        print('✅ User check successful, exists: ${responseData['exists']}');
         return UserExistenceResponse.success(
           exists: responseData['exists'] ?? false,
           userData: responseData['userData'],
         );
       } else {
+        print('❌ User check failed with status: ${response.statusCode}');
         return UserExistenceResponse.error(
           code: responseData['code'] ?? 'UNKNOWN_ERROR',
           message: responseData['message'] ?? responseData['error'] ?? 'Failed to check user',
         );
       }
     } catch (e) {
+      print('❌ User check network error: $e');
       return UserExistenceResponse.error(
         code: 'NETWORK_ERROR',
         message: 'Network error: ${e.toString()}',

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/otp_service.dart';
+import '../../services/local_session.dart';
+import '../../home_screen.dart';
 import 'user_details_form_screen.dart';
 
 class PhoneAuthScreen extends StatefulWidget {
@@ -15,7 +16,6 @@ class PhoneAuthScreen extends StatefulWidget {
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   bool _loading = false;
   bool _otpSent = false;
@@ -90,62 +90,120 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       
       if (verifyResponse.success) {
         final phoneNumber = verifyResponse.phoneNumber!;
+        print('✅ OTP verified successfully for: $phoneNumber');
         
         // Check if user exists
+        print('🔍 Checking if user exists...');
         final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
+        print('📋 User exists response: ${userExistsResponse.success}, exists: ${userExistsResponse.exists}');
         
         if (userExistsResponse.success && userExistsResponse.exists == true) {
           // User exists - log them in
+          print('👤 User exists, logging in with data: ${userExistsResponse.userData}');
           await _loginExistingUser(phoneNumber, userExistsResponse.userData);
+
+          if (!mounted) return;
+
+          // Fire the callback so AuthGate can rebuild
+          print('🔄 Calling onAuthSuccess for existing user');
           widget.onAuthSuccess?.call();
+          print('🔄 onAuthSuccess called for existing user');
+
+          // Stop loading and navigate directly as a fallback
+          setState(() => _loading = false);
+          print('🔄 Navigating directly to home screen for existing user');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+          );
         } else {
           // User doesn't exist - show details form
+          print('👤 User does not exist, showing registration form');
           if (mounted) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                 builder: (context) => UserDetailsFormScreen(
                   phoneNumber: phoneNumber,
-                  onComplete: widget.onAuthSuccess,
+                  onComplete: () {
+                    if (mounted) {
+                      print('🔄 UserDetailsFormScreen onComplete called');
+                      widget.onAuthSuccess?.call();
+                      print('🔄 onAuthSuccess callback called');
+                    }
+                  },
                 ),
               ),
             );
           }
         }
       } else {
+        if (mounted) {
+          setState(() { 
+            _error = verifyResponse.message;
+            _loading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() { 
-          _error = verifyResponse.message;
+          _error = 'Failed to verify OTP: ${e.toString()}';
           _loading = false;
         });
       }
-    } catch (e) {
-      setState(() { 
-        _error = 'Failed to verify OTP: ${e.toString()}';
-        _loading = false;
-      });
     }
   }
 
   Future<void> _loginExistingUser(String phoneNumber, Map<String, dynamic>? userData) async {
     try {
-      // Create anonymous user first
-      final userCredential = await FirebaseAuth.instance.signInAnonymously();
+      print('🔐 Logging in existing user: $phoneNumber');
+      print('📋 User data: $userData');
       
-      // Update display name from user data
-      final name = userData?['name'] ?? 'User';
-      await userCredential.user?.updateDisplayName(name);
+      // Instead of Firebase Auth, we'll create a custom user session
+      // Store user data locally and mark as authenticated
+      await _createCustomUserSession(phoneNumber, userData);
       
-      // Update last login time
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid);
-      await userDoc.set({
-        'phoneNumber': phoneNumber,
-        'name': name,
-        'lastLoginAt': FieldValue.serverTimestamp(),
-        'isVerified': true,
-      }, SetOptions(merge: true));
+      print('✅ Existing user logged in successfully');
       
     } catch (e) {
-      print('Error logging in existing user: $e');
+      print('❌ Error logging in existing user: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _createCustomUserSession(String phoneNumber, Map<String, dynamic>? userData) async {
+    try {
+      print('💾 Creating custom user session for: $phoneNumber');
+      
+      // Create user document in Firestore without Firebase Auth
+      final sessionData = {
+        'phoneNumber': phoneNumber,
+        'name': userData?['name'] ?? 'User',
+        'email': userData?['email'],
+        'dateOfBirth': userData?['dateOfBirth'],
+        'createdAt': userData?['createdAt'],
+        'lastLoginAt': FieldValue.serverTimestamp(),
+        'isVerified': true,
+        'isAuthenticated': true,
+        'sessionId': DateTime.now().millisecondsSinceEpoch.toString(),
+        'profileComplete': userData?['profileComplete'] ?? false,
+      };
+      
+      // Remove null values
+      sessionData.removeWhere((key, value) => value == null);
+      
+      print('📝 Session data to save: $sessionData');
+      
+      // Store in Firestore with a custom document ID
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(phoneNumber.replaceAll(RegExp(r'[^\d]'), ''));
+      await userDoc.set(sessionData, SetOptions(merge: true));
+      
+      print('✅ User session created successfully in Firestore');
+      await LocalSession.setCurrentUserId(userDoc.id);
+      
+    } catch (e) {
+      print('❌ Error creating user session: $e');
       rethrow;
     }
   }
@@ -171,218 +229,218 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 32),
-            // Illustration
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Center(
-                child: Image.asset(
-                  'assets/login.png',
-                  height: 300,
-                  fit: BoxFit.contain,
-                ),
-              ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height - 
+                         MediaQuery.of(context).padding.top - 
+                         MediaQuery.of(context).padding.bottom,
             ),
-            const Spacer(),
-            
-            // Main content
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    Text(
-                      _otpSent ? 'Enter Verification Code' : 'Welcome to SafeStep',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF7B3FA0),
+            child: IntrinsicHeight(
+              child: Column(
+                children: [
+                  const SizedBox(height: 32),
+                  // Illustration
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/login.png',
+                        height: 250,
+                        fit: BoxFit.contain,
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _otpSent 
-                        ? 'We sent a verification code to ${_phoneController.text}'
-                        : 'Enter your phone number to get started',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 32),
-                    
-                    if (!_otpSent) ...[
-                      // Name field (optional)
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          labelText: 'Your Name (Optional)',
-                          hintText: 'Enter your name',
-                          prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (value) => null, // Optional field
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Phone field
-                      TextFormField(
-                        controller: _phoneController,
-                        decoration: InputDecoration(
-                          labelText: 'Phone Number',
-                          hintText: '+94 77 123 4567',
-                          prefixIcon: const Icon(Icons.phone),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        keyboardType: TextInputType.phone,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Phone number is required';
-                          }
-                          final digits = value.replaceAll(RegExp(r'[^\d]'), '');
-                          if (digits.length < 9) {
-                            return 'Please enter a valid Sri Lankan phone number';
-                          }
-                          return null;
-                        },
-                      ),
-                    ] else ...[
-                      // OTP field
-                      TextFormField(
-                        controller: _otpController,
-                        decoration: InputDecoration(
-                          labelText: 'Verification Code',
-                          hintText: '123456',
-                          prefixIcon: const Icon(Icons.security),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Verification code is required';
-                          }
-                          if (value.length < 6) {
-                            return 'Please enter the complete verification code';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Error message
-                    if (_error != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red.shade600, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _error!,
-                                style: TextStyle(color: Colors.red.shade700),
-                              ),
+                  ),
+                  const Spacer(),
+                  
+                  // Main content
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          Text(
+                            _otpSent ? 'Enter Verification Code' : 'Welcome to SafeStep',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF7B3FA0),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    
-                    // Main action button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : (_otpSent ? _verifyOTP : _sendOTP),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7B3FA0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            textAlign: TextAlign.center,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: _loading
-                            ? const CircularProgressIndicator(color: Colors.white)
-                            : Text(
-                                _otpSent ? 'Verify & Continue' : 'Send Verification Code',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                          const SizedBox(height: 8),
+                          Text(
+                            _otpSent 
+                              ? 'We sent a verification code to ${_phoneController.text}'
+                              : 'Enter your phone number to get started',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 32),
+                          
+                          if (!_otpSent) ...[
+                            // Phone field only
+                            TextFormField(
+                              controller: _phoneController,
+                              decoration: InputDecoration(
+                                labelText: 'Phone Number',
+                                hintText: '+94 77 123 4567',
+                                prefixIcon: const Icon(Icons.phone),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                      ),
-                    ),
-                    
-                    // Resend/Back button
-                    if (_otpSent) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          TextButton(
-                            onPressed: _loading ? null : _goBack,
-                            child: const Text(
-                              '← Change Number',
-                              style: TextStyle(color: Color(0xFF7B3FA0)),
+                              keyboardType: TextInputType.phone,
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Phone number is required';
+                                }
+                                final digits = value.replaceAll(RegExp(r'[^\d]'), '');
+                                if (digits.length < 9) {
+                                  return 'Please enter a valid Sri Lankan phone number';
+                                }
+                                return null;
+                              },
+                            ),
+                          ] else ...[
+                            // OTP field
+                            TextFormField(
+                              controller: _otpController,
+                              decoration: InputDecoration(
+                                labelText: 'Verification Code',
+                                hintText: '123456',
+                                prefixIcon: const Icon(Icons.security),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 8,
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Verification code is required';
+                                }
+                                if (value.length < 6) {
+                                  return 'Please enter the complete verification code';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Error message
+                          if (_error != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.red.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.error_outline, color: Colors.red.shade600, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _error!,
+                                      style: TextStyle(color: Colors.red.shade700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          
+                          // Main action button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _loading ? null : (_otpSent ? _verifyOTP : _sendOTP),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF7B3FA0),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              child: _loading
+                                  ? const CircularProgressIndicator(color: Colors.white)
+                                  : Text(
+                                      _otpSent ? 'Verify & Continue' : 'Send Verification Code',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                             ),
                           ),
-                          TextButton(
-                            onPressed: _loading ? null : _resendOTP,
-                            child: const Text(
-                              'Resend Code',
-                              style: TextStyle(color: Color(0xFF7B3FA0)),
+                          
+                          // Resend/Back button
+                          if (_otpSent) ...[
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                TextButton(
+                                  onPressed: _loading ? null : _goBack,
+                                  child: const Text(
+                                    '← Change Number',
+                                    style: TextStyle(color: Color(0xFF7B3FA0)),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _loading ? null : _resendOTP,
+                                  child: const Text(
+                                    'Resend Code',
+                                    style: TextStyle(color: Color(0xFF7B3FA0)),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                  
+                  const Spacer(),
+                  
+                  // Footer
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 24.0),
+                    child: Text(
+                      'By continuing, you agree to our Terms of Service and Privacy Policy',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
             ),
-            
-            const Spacer(),
-            
-            // Footer
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
-              child: Text(
-                'By continuing, you agree to our Terms of Service and Privacy Policy',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

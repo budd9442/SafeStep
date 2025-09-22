@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:safestep/services/local_session.dart';
 
 class MapView extends StatefulWidget {
   final LatLng? currentPosition;
@@ -127,30 +127,32 @@ class MapViewState extends State<MapView> {
   }
 
   Future<String?> _fetchAndCacheProfilePic() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
     try {
-      // First try to get the profile picture URL from Firestore
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      // Use local session user ID
+      final localUserId = await LocalSession.getCurrentUserId();
+      if (localUserId == null || localUserId.isEmpty) return null;
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(localUserId).get();
       final userData = userDoc.data();
-      final profilePicUrl = userData?['profilePicUrl'] ?? userData?['profilePic'];
-      
+      final profilePicUrl = (userData?['profilePicUrl'] ?? userData?['profilePic']) as String?;
+
       if (profilePicUrl != null && profilePicUrl.isNotEmpty) {
         if (profilePicUrl.startsWith('http')) {
-          // It's already a URL, return it directly
-          return profilePicUrl;
+          // It's already a URL, return it with cache-busting
+          return '$profilePicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
         } else {
           // It's a Firebase Storage path, get the download URL
           final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child(profilePicUrl);
-          return await ref.getDownloadURL();
+          final url = await ref.getDownloadURL();
+          return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
         }
       }
-      
-      // Fallback to the old method
-      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/${user.uid}.jpg');
+
+      // Fallback to Firebase Storage with user ID
+      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/$localUserId.jpg');
       final url = await ref.getDownloadURL();
-      return url;
+      return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
     } catch (e) {
+      print('Error fetching profile pic: $e');
       return null;
     }
   }
@@ -208,10 +210,7 @@ class MapViewState extends State<MapView> {
   void didUpdateWidget(covariant MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
     // If the user changes (e.g. after login), reload the marker
-    if (FirebaseAuth.instance.currentUser?.uid != null &&
-        FirebaseAuth.instance.currentUser?.uid != oldWidget.currentPosition?.hashCode.toString()) {
-      _loadProfilePointerMarkerWithFallback();
-    }
+    _loadProfilePointerMarkerWithFallback();
     setState(() {
       _updateDangerZones();
     });
@@ -246,13 +245,21 @@ class MapViewState extends State<MapView> {
 
   /// Call this to force refresh the profile pointer marker after pfp update
   Future<void> refreshProfilePointerMarker() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
     try {
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/profile_${user.uid}.jpg');
-      if (await file.exists()) {
-        await file.delete();
+      // Find the authenticated user to get the user ID
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isAuthenticated', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isNotEmpty) {
+        final userDoc = usersQuery.docs.first;
+        final file = File('${dir.path}/profile_${userDoc.id}.jpg');
+        if (await file.exists()) {
+          await file.delete();
+        }
       }
     } catch (_) {}
     await _loadProfilePointerMarkerWithFallback();

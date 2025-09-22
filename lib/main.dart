@@ -4,7 +4,8 @@ import 'package:safestep/home_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:safestep/services/sos_navigation_service.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'services/local_session.dart';
 import 'views/auth/phone_auth_screen.dart';
 
 
@@ -51,22 +52,64 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _isLoading = true;
+  bool _isAuthenticated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthenticationStatus();
+  }
+
+  Future<void> _checkAuthenticationStatus() async {
+    try {
+      print('🔍 Checking authentication status...');
+      final localUserId = await LocalSession.getCurrentUserId();
+      if (mounted) {
+        if (localUserId != null && localUserId.isNotEmpty) {
+          print('✅ Local session found for $localUserId');
+          _isAuthenticated = true;
+        } else {
+          print('❌ No local session');
+          _isAuthenticated = false;
+        }
+        _isLoading = false;
+        setState(() {});
+      }
+    } catch (e) {
+      print('❌ Error checking authentication status: $e');
+      if (mounted) {
+        setState(() {
+          _isAuthenticated = false;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.hasData) {
-          return const HomeScreen();
-        } else {
-          return const PhoneAuthScreen();
-        }
-      },
-    );
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    
+    if (_isAuthenticated) {
+      return const HomeScreen();
+    } else {
+      return PhoneAuthScreen(
+        onAuthSuccess: () {
+          print('🔄 PhoneAuthScreen onAuthSuccess called');
+          // Refresh authentication status after successful login
+          _checkAuthenticationStatus();
+        },
+      );
+    }
   }
 }
 

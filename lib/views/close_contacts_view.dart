@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CloseContactsView extends StatefulWidget {
@@ -14,11 +13,38 @@ class _CloseContactsViewState extends State<CloseContactsView> {
   final TextEditingController _phoneController = TextEditingController();
   bool _loading = false;
   String? _error;
+  String? _userId;
 
-  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentUserId();
+  }
+
+  Future<void> _getCurrentUserId() async {
+    try {
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isAuthenticated', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isNotEmpty) {
+        setState(() {
+          _userId = usersQuery.docs.first.id;
+        });
+      }
+    } catch (e) {
+      print('Error getting current user ID: $e');
+    }
+  }
 
   Future<void> _addContact() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_userId == null) {
+      setState(() { _error = 'User not authenticated'; _loading = false; });
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
       final contacts = await _getContacts();
@@ -28,7 +54,7 @@ class _CloseContactsViewState extends State<CloseContactsView> {
       }
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(_uid)
+          .doc(_userId!)
           .collection('contacts')
           .add({
         'name': _nameController.text.trim(),
@@ -46,9 +72,10 @@ class _CloseContactsViewState extends State<CloseContactsView> {
   }
 
   Future<List<Map<String, dynamic>>> _getContacts() async {
+    if (_userId == null) return [];
     final snap = await FirebaseFirestore.instance
         .collection('users')
-        .doc(_uid)
+        .doc(_userId!)
         .collection('contacts')
         .orderBy('createdAt')
         .get();
@@ -56,9 +83,10 @@ class _CloseContactsViewState extends State<CloseContactsView> {
   }
 
   Future<void> _deleteContact(String id) async {
+    if (_userId == null) return;
     await FirebaseFirestore.instance
         .collection('users')
-        .doc(_uid)
+        .doc(_userId!)
         .collection('contacts')
         .doc(id)
         .delete();
@@ -159,31 +187,33 @@ class _CloseContactsViewState extends State<CloseContactsView> {
           ),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(_uid)
-                .collection('contacts')
-                .orderBy('createdAt')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final docs = snapshot.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.group, size: 80, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
-                      const Text('No contacts yet. Add your trusted contacts!', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                    ],
-                  ),
-                );
-              }
-              return ListView.separated(
+          child: _userId == null 
+            ? const Center(child: CircularProgressIndicator())
+            : StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(_userId!)
+                    .collection('contacts')
+                    .orderBy('createdAt')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data?.docs ?? [];
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.group, size: 80, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          const Text('No contacts yet. Add your trusted contacts!', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.separated(
                 padding: const EdgeInsets.all(18),
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -208,8 +238,8 @@ class _CloseContactsViewState extends State<CloseContactsView> {
                   );
                 },
               );
-            },
-          ),
+                },
+              ),
         ),
       ],
     );
