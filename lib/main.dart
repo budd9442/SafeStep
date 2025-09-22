@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:safestep/home_screen.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:safestep/services/sos_navigation_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'views/auth/login_screen.dart';
+import 'views/auth/phone_auth_screen.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await dotenv.load();
+  SosNavigationService.initialize();
+  // Request notification permission on Android 13+
+  try {
+    await Permission.notification.request();
+  } catch (_) {}
   
   // Debug: Check if required environment variables are loaded
   final geminiApiKey = dotenv.env['GEMINI_API_KEY'];
@@ -38,6 +45,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.deepPurple,
       ),
+      navigatorKey: SosNavigationService.navigatorKey,
       home: AuthGate(),
     );
   }
@@ -55,7 +63,7 @@ class AuthGate extends StatelessWidget {
         if (snapshot.hasData) {
           return const HomeScreen();
         } else {
-          return LoginScreen();
+          return const PhoneAuthScreen();
         }
       },
     );

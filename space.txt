@@ -1,0 +1,1115 @@
+sms/send
+This service allows the user to send SMS to one or more terminals (phones or any SMS-enabled device) from their application.
+
+SMS send service supports only POST HTTP requests. This is used when sending SMS to a mobile phone from an application.
+
+An application wishing to initiate an MT SMS message should use this operation type.
+
+SMS Mobile Termination
+Request Body schema: application/json;charset=utf-8
+version
+required
+string
+API version shall be numbered as 1.0, 2.0 etc.
+
+If version is specified in the request, same version must be sent in the response.
+
+If version is not specified in the request, the latest version will be specified in the response.
+
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+message
+required
+string
+Content of the message that needs to be sent.
+
+Messages over the limit shall be broken up by the platform before sending
+
+destinationAddresses
+required
+Array of strings
+List of destination addresses should be telephone numbers.(tel - for MSISDN).
+
+tel:94702725777.
+
+Address can also have the value - tel: all
+
+which will in return be a message to the subscribed base of the application
+
+at least one should be specified
+
+Note : tel might be a masked number depending on the type of application
+
+sourceAddress	
+string
+Address of the source.
+
+sourceAddress: tel:94702725777
+
+at least one will be specified
+
+deliveryStatusRequest	
+string
+Enum: 0 1
+Indicates the need of a Delivery Status Report for the message.
+
+0 - Delivery Report not required
+
+1 - Delivery Report Required
+
+encoding	
+string
+Enum: 0 240 245
+Encoding scheme used in the message
+
+If not specified taken as Text
+
+If the encoding type is “Binary” then the message content will be represented as hex encoded.
+
+0 - Text
+
+240 - Flash SMS
+
+245 - Binary SMS
+
+binaryHeader	
+string <hexadecimal>
+For advanced type of messages where the binary header shall be sent from the application
+
+Responses
+200 success
+
+post
+/sms/send
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"version": "1.0",
+"applicationId": "APP_999999",
+"password": "password",
+"message": "Hello",
+"destinationAddresses": [
+"tel:94702725777"
+],
+"sourceAddress": "77000",
+"deliveryStatusRequest": "1",
+"encoding": "245",
+"binaryHeader": "526574697265206170706c69636174696f6e20616e642072656c6561736520524b7320696620666f756e642065787069726564"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"version": "1.0",
+"requestId": "101901031657410007",
+"destinationResponses": [
+{}
+],
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+sms/receive
+This service retrieves the SMS sent to the web application. Receive service returns only a list of SMS messages received since the previous invocation of the method.
+
+SMS Mobile Origination
+Request Body schema: application/json;charset=utf-8
+version
+required
+string
+API version shall be numbered as 1.0, 2.0 etc.
+
+If version is specified in the request, same version must be sent in the response.
+
+If version is not specified in the request, the latest version will be specified in the response.
+
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+sourceAddress
+required
+string
+Address of the source.
+
+sourceAddress: tel:94702725777
+
+at least one will be specified
+
+message
+required
+string
+Content of the message sent by the user
+
+requestId
+required
+string
+Uniquely identifies a request within TAP
+
+encoding
+required
+string
+Enum: 0 240 245
+Encoding scheme used in the message.
+
+If the encoding type is “Binary” then the message content will be represented as hex encoded.
+
+0 - Text
+
+240 - Flash SMS
+
+245 - Binary SMS
+
+Responses
+200 success
+
+post
+/sms/receive
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"applicationId": "APP_000029",
+"sourceAddress": "tel:94702725777",
+"message": "string",
+"requestId": "APP_000001",
+"encoding": "0"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+sms/report
+When performing a SendSms Operation if an application has requested for a Delivery Response message from the Message Centre, then TAP will initiate the Delivery Report service to hand over the Delivery Response message to the application. The messageId should be used to match the MT response with the Delivery Report.
+
+Delivery Status Report Service
+Request Body schema: application/json;charset=utf-8
+destinationAddress
+required
+string
+Address of the subscriber
+
+timeStamp
+required
+string
+The timestamp sent from the SMS
+
+"yyMMddHHmm"
+
+yy – last two digits of the year (00-99)
+
+MM – month (01-12)
+
+dd – day (01-31)
+
+HH – hour (00-23)
+
+mm- minute (00-59)
+
+requestId
+required
+string
+Uniquely identifies a request within TAP
+
+deliveryStatus
+required
+string
+Enum: "DELIVERED" "EXPIRED" "DELETED" "UNDELIVERABLE" "ACCEPTED" "UNKNOWN" "REJECTED"
+Enum from TAP to Application:
+
+DELIVERED ,EXPIRED ,DELETED ,UNDELIVERABLE ,ACCEPTED ,UNKNOWN ,REJECTED
+
+Responses
+200 success
+
+post
+/sms/report
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"destinationAddress": "tel:94702725777",
+"timeStamp": "20120113082110",
+"requestId": "MSG_000111",
+"deliveryStatus": "DELIVERED"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+ussd/send
+This service is used when sending USSD messages to a mobile phone from an application.USSD send service supports only POST HTTP requests.
+
+Ussd Send Services
+Request Body schema: application/json;charset=utf-8
+version
+required
+string
+API version shall be numbered as 1.0, 2.0 etc.
+
+If version is specified in the request, same version must be sent in the response.
+
+If version is not specified in the request, the latest version will be specified in the response.
+
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+message
+required
+string
+Content of the message sent by the application
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+sessionId
+required
+string
+Unique number that USSD Gateway assigns to the application for the duration of the session. This number will be maintained in all the messages throughout a single session.
+
+ussdOperation
+required
+string
+Enum: "mo-init" "mo-cont" "mt-init" "mt-cont" "mt-fin"
+USSD operation
+
+mo-cont:TAP to assign for and USSD message originated from subscriber, that comes after a init
+
+nmt-init: App to assign when a USSD session is initiated by an application
+
+mt-cont: App to assign for any USSD message originated from application, that comes after a init
+
+mt-fin: App to assign when session ends in final message
+
+Data type will be string where the operation name itself will be used in the parameter value.
+
+destinationAddress
+required
+string
+Destination address should be a telephone number (tel - for MSISDN)
+
+Note : tel might be a masked number depending on the type of application
+
+encoding	
+string
+Value: 440
+Encoding scheme used in the message
+
+440 - Plain ASCII characters
+
+Responses
+200 success
+
+post
+/ussd/send
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"applicationId": "APP_000001",
+"message": "1. Press One\n 2. Press two\n 3. Press three\n 4. Exit\n",
+"password": "password",
+"sessionId": "1330929317043",
+"ussdOperation": "mt-cont",
+"destinationAddress": "tel:94702725777 ",
+"encoding": "440"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"requestId": "101901031657410007",
+"timeStamp": "20190103165801",
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+ussd/receive
+This service allows TAP to deliver MO messages to the application using HTTP – based API. The flow of messages is initiated by a MO request sent to an application,TAP will deliver the message to the application as an acknowledgement. Hence it could be either request-response exchange or a request-exception exchange.
+
+Receive USSD request is a MO message which will be sent to the application through mSpace as a delivery request.
+
+Ussd Receive Services
+Request Body schema: application/json;charset=utf-8
+version
+required
+string
+API version shall be numbered as 1.0, 2.0 etc.
+
+If version is specified in the request, same version must be sent in the response.
+
+If version is not specified in the request, the latest version will be specified in the response.
+
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+message
+required
+string
+Content of the message sent by the user
+
+requestId
+required
+string
+Uniquely identifies a request within TAP
+
+sessionId
+required
+string
+Unique number that USSD Gateway assigns to the application for the duration of the session. This number will be maintained in all the messages throughout a single session.
+
+ussdOperation
+required
+string
+Enum: "mo-init" "mo-cont" "mt-init" "mt-cont" "mt-fin"
+USSD operation
+
+mo-cont:TAP to assign for and USSD message originated from subscriber, that comes after a init
+
+mt-init: App to assign when a USSD session is initiated by an application
+
+mt-cont: App to assign for any USSD message originated from application, that comes after a init
+
+mt-fin: App to assign when session ends in final message
+
+sourceAddress
+required
+string
+Address of the source.
+
+sourceAddress:tel:94702725777
+
+at least one will be specified
+
+vlrAddress	
+string
+VLR(Visitor Location Register) address of the sender
+
+encoding
+required
+string
+Value: 440
+Encoding scheme used in the message
+
+440 - Plain ASCII characters
+
+Responses
+200 success
+
+post
+/ussd/receive
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"applicationId": "APP_000029",
+"message": "*141#",
+"requestId": "1330933229901",
+"sessionId": "1330929317043",
+"ussdOperation": "mt-cont",
+"sourceAddress": "tel:94702725777",
+"vlrAddress": "tel:94702725777",
+"encoding": "440"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"statusCode": "S1000",
+"statusDetail": "Success"
+}
+caas/directDebit
+This service charges a specific amount from a subscriber’s account.
+
+Direct Debit
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated by the system when provisioning an application.
+
+Only a single value can be sent per request.
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+externalTrxId
+required
+string
+This is the transaction ID generated by the application to map the request with the response.
+
+This is needed to avoid any conflicts when SP inquires about a transaction.
+
+Only a single value can be sent per request.
+
+subscriberId
+required
+string
+This can be the MSISDN of the subscriber to be charged. This is a unique identifier.
+
+tel:94716177301 is for MSISDN
+
+Subcriber: tel:94716177301
+
+Note: tel might be a masked number depending on the type of the application
+
+Only a single value can be sent per request.
+
+paymentInstrumentName
+required
+string
+Value: "Mobile Account"
+The name of the payment instrument.
+
+Only a single value can be sent per request.
+
+accountId	
+string
+The account of the payment instrument.
+
+Only a single value can be sent per request.
+
+amount
+required
+string
+Amount to be reserved for charging.
+
+Only a single value can be sent per request.
+
+currency	
+string
+Currency unit of the amount.
+
+Only a single value can be sent per request.
+
+Only ‘LKR’ is allowed.
+
+Responses
+200 success
+
+post
+/caas/direct/debit
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_999999",
+"password": "95904999aa8edb0c038b3295fdd271de",
+"externalTrxId": "12345678901234567890123456789012",
+"subscriberId": "tel:94716177301",
+"paymentInstrumentName": "Mobile Account",
+"accountId": "12345",
+"amount": "12345",
+"currency": "LKR"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"externalTrxId": "12345678901234567890123456789012",
+"internalTrxId": "321",
+"referenceId": "12345678",
+"timeStamp": "2012-07-30T12:48:10-0400",
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+subscription/userSubscription
+This service handles user subscription process(subscription/unsubscription)
+
+User Subscription
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+subscriberId
+required
+string
+This can be the MSISDN of the subscriber to be charged. This is a unique identifier.
+
+tel: is for MSISDN
+
+Subcriber: tel:94716177301
+
+Note: tel might be a masked number depending on the type of the application
+
+Only a single value can be sent per request.
+
+action
+required
+string
+Enum: 0 1
+0 -user unsubscription
+
+1 -user subscription
+
+Responses
+200 success
+
+post
+/subscription/send
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_999999",
+"password": "95904999aa8edb0c038b3295fdd271de",
+"subscriberId": "tel:94716177301",
+"action": "0"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0.",
+"statusCode": "S1000",
+"statusDetail": "not registered",
+"subscriptionStatus": "UNREGISTERED."
+}
+subscription/baseSize
+This service returns the number of registered subscribers
+
+Base Size
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+Responses
+200 success
+
+post
+/subscription/query-base
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_000201",
+"password": "39a8d1cb245029d0560619a2b388669c"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"baseSize": "0",
+"version": "1.0.",
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+subscription/subscriberStatus
+This service returns the user subscription status(unregistered,registered)
+
+Subscriber Status
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Unique identification of the application within the platform
+
+password
+required
+string
+Password given when provisioning the application
+
+subscriberId
+required
+string
+This is the MSISDN of the subscriber to be charged
+
+Responses
+200 success
+
+post
+/subscription/getStatus
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_999999",
+"password": "95904999aa8edb0c038b3295fdd271de",
+"subscriberId": "tel:94716177301"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0.",
+"statusCode": "S1000",
+"statusDetail": "Request was successfully processed",
+"subscriptionStatus": "UNREGISTERED."
+}
+subscription/getSubscriberChargingInfo
+Get Subscriber Charging Info
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Unique identification of the application within the platform
+
+password
+required
+string
+Password given when provisioning the application
+
+subscriberIds	
+string
+MSISDNs of the list of subscribers. Eg: [tel: 94712342345, tel: 94712678845, tel:9471982563]
+
+If the application accepts masked numbers, list of
+
+masked numbers must be communicated in this parameter
+
+List can contain maximum of 10 MSISDNs per request
+
+Responses
+200 success
+
+post
+/subscription/getSubscriberChargingInfo
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"applicationId": "APP_102672",
+"password": "cf2b9e361c13bc54b86d3c8180b0582fd",
+"subscriberIds": [
+"tel: 94712342345",
+"tel: 94712678845",
+"tel: 9471982563"
+]
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"version": "1.0",
+"destinationResponses": [
+{}
+],
+"statusCode": "S1000",
+"statusDetail": "Success."
+}
+subscription/notify
+This service sends notifications to the users
+
+Subscriber Notifications
+Request Body schema: application/json;charset=utf-8
+timeStamp
+required
+string
+The timestamp sent from the SMS. "yyMMddHHmm" yy – last two digits of the year (00-99) MM – month (01-12) dd – day (01-31) HH – hour (00-23) mm- minute (00-59)
+
+version
+required
+string
+API version shall be numbered as 1.0, 2.0 etc.
+
+If version is specified in the request, same version must be sent in the response.
+
+If version is not specified in the request, the latest version will be specified in the response.
+
+applicationId
+required
+string
+Used to identify the application. This is a unique identifier generated while provisioning an application.
+
+Only a single value can be sent per request.
+
+password
+required
+string
+Used to authenticate the application originated message against the credentials of the service provider.
+
+Encoded, single value.
+
+subscriberId
+required
+string
+This can be the MSISDN of the subscriber to be charged. This is a unique identifier.
+
+tel:94716177301 is for MSISDN
+
+Subcriber: tel:94716177301
+
+Note: tel might be a masked number depending on the type of the application
+
+Only a single value can be sent per request.
+
+frequency
+required
+string
+Enum: "daily" "weekly" "monthly" "yearly"
+Frequency of notifications being sent
+
+status
+required
+string
+Status of the subscription eg:UNREGISTERED,REGISTERED
+
+Responses
+200 success
+
+post
+/subscription/notify
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"timeStamp": "20120113082110",
+"version": "1.0",
+"applicationId": "APP_999999",
+"password": "95904999aa8edb0c038b3295fdd271de",
+"subscriberId": "tel:94716177301",
+"frequency": "monthly",
+"status": "REGISTERED."
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"statusCode": "S1000",
+"statusDetail": "Request was successfully processed"
+}
+subscription/getSubscriberList
+This service provides an opportunity for the developers to retrieve subscriber list. This API allows the developer to stay updated with the subscription notifications which he/she has missed receiving.
+
+Subscriber List
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Unique identification of the application within the platform
+
+password
+required
+string
+Password given when provisioning the application
+
+version	
+string
+API version
+
+requestPage
+required
+Integer
+The specific page number from a list of pages containing subscription notifications.
+
+Responses
+200 success
+
+post
+/subscription/getSubscriberList
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_102672",
+"password": "cf2b9e361c13bc54b86d3c8180b0582fd",
+"version": "1.0",
+"requestPage": 2
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"version": "1.0",
+"statusCode": "S1000",
+"statusDetail": "Request was successfully processed",
+"nextPageNumber": 3,
+"moreDataAvailable": "true",
+"subscribers": {
+"subscriberId": "tel: 94712342345",
+"subscriptionStatus": "REGISTERED",
+"lastChargedDate": "2020-01-23 22.03.22",
+"lastChargedAmount": "30.00 LKR"
+}
+}
+otp/request
+This service is used by the developer to request an OTP for a subscriber's MSISDN. Upon the request, mSpace will generate and send an OTP to the subscriber's MSISDN. This OTP must be entered by the subscriber into the mobile/web application to activate a subscription.
+
+Request OTP
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+ID of the application
+
+password
+required
+string
+Password/API key given to uniquely identify the application
+
+subscriberId
+required
+string
+Mobile number of the end consumer
+
+applicationHash	
+string
+Hash string to determine which verification messages to send to your app.
+
+applicationMetaData	
+object (applicationMetaData)
+Responses
+200 success
+
+post
+/otp/request
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+Expand allCollapse all
+{
+"applicationId": "APP_000375",
+"password": "a07118cda5215fc6d01db5b2ab848edd",
+"subscriberId": "tel:94716177301",
+"applicationHash": "abcdefgh",
+"applicationMetaData": {
+"client": "MOBILEAPP",
+"device": "Samsung S10",
+"os": "android 8",
+"appCode": "https://play.google.com/store/apps/details?id=lk"
+}
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"statusCode": "S1000",
+"referenceNo": "213561321321613",
+"statusDetail": "Success"
+}
+otp/verify
+This service is used by the developer to verify an OTP entered by a subscriber into the application. Upon a successful verification the subscription process of mSpace will be activated.
+
+Verify OTP
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+ID of the application
+
+password
+required
+string
+Password/API key given to uniquely identify the application
+
+referenceNo
+required
+string
+Reference number returned with request OTP API
+
+otp
+required
+string
+One time password (OTP) to be used to MSISDN verification for the application
+
+Responses
+200 success
+
+post
+/otp/verify
+Request samples
+PayloadJavaPHPjavaScript.net
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"applicationId": "APP_000375",
+"password": "a07118cda5215fc6d01db5b2ab848edd",
+"referenceNo": "213561321321613",
+"otp": "123564"
+}
+Response samples
+200
+Content type
+application/json;charset=utf-8
+
+Copy
+{
+"version": "1.0",
+"statusCode": "S1000",
+"subscriptionStatus": "REGISTERED",
+"statusDetail": "Success",
+"subscriberId": "tel:sdfasdfasdfwqerqwtgfgsafgasfgasdfasdfasdfasdfasdfasf"
+}
+lbs/request
+This service is used by the developer to request a location of a subscriber. Upon the request, mSpace will communicate the location of the subscriber if he/she has granted the permission.
+
+Request Location
+Request Body schema: application/json;charset=utf-8
+applicationId
+required
+string
+Application identification within the platform
+
+password
+required
+string
+Password of the application
+
+version	
+string
+API version
+
+requesterId
+required
+string
+MSISDN of the subscriber who is requesting the location updates. This is a unique identifier. Note: MSISDN might be a masked number depending on the type of the application
+
+subscriberId
+required
+string
+MSISDN of the subscriber whose location is needed. This is a unique identifier. Note: MSISDN might be a masked number depending on the type of the application
+
+serviceType	
+ENUM
+Required MLP service type. Currently supports: IMMEDIATE
+
+Responses
+200 success

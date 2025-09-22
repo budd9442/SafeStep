@@ -7,7 +7,7 @@ class User {
   final String name;
   final String pwd;
   final String profilePic;
-  final String email;
+  final String phoneNumber;
   final String dob;
   final List<EmergencyContact> emergencyContacts;
   final List<Alert>? myAlerts;
@@ -20,7 +20,7 @@ class User {
     required this.name,
     required this.pwd,
     required this.profilePic,
-    required this.email,
+    required this.phoneNumber,
     required this.dob,
     this.emergencyContacts = const [],
     this.myAlerts = const [],
@@ -35,7 +35,7 @@ class User {
       name: 'User',
       pwd: '',
       profilePic: 'https://firebasestorage.googleapis.com/v0/b/safeguardher-app.appspot.com/o/profile_pics%2F01719958727%2F1000007043.png?alt=media&token=34a85510-d1e2-40bd-b84b-5839bef880bc',
-      email: '',
+      phoneNumber: '',
       dob: '',
       documentRef: FirebaseFirestore.instance.collection('users').doc('empty'),
     );
@@ -45,8 +45,8 @@ class User {
     return User(
       name: data['name'] ?? 'User',
       pwd: data['pwd'] ?? '',
-      profilePic: data['profilePicUrl'] ?? 'https://firebasestorage.googleapis.com/v0/b/safeguardher-app.appspot.com/o/profile_pics%2F01719958727%2F1000007043.png?alt=media&token=34a85510-d1e2-40bd-b84b-5839bef880bc',
-      email: data['email'] ?? '',
+      profilePic: data['profilePicUrl'] ?? data['profilePic'] ?? '',
+      phoneNumber: data['phoneNumber'] ?? data['email'] ?? '', // Fallback to email for backward compatibility
       dob: data['DOB'] ?? '',
       emergencyContacts: (data['emergency_contacts'] as List<dynamic>? ?? [])
           .map((contact) => EmergencyContact.fromFirestore(contact as Map<String, dynamic>))

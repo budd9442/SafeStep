@@ -4,8 +4,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 
 class MapView extends StatefulWidget {
   final LatLng? currentPosition;
@@ -66,15 +68,29 @@ class MapViewState extends State<MapView> {
     final pointerFrame = await pointerCodec.getNextFrame();
     final pointerImage = pointerFrame.image;
 
-    // Load the profile image (from file if not asset)
+    // Load the profile image (from URL, file, or asset)
     Uint8List profileBytes;
-    if (profilePicPath.startsWith('/') || profilePicPath.startsWith('file://')) {
+    if (profilePicPath.startsWith('http')) {
+      // Network URL - download the image
+      try {
+        final response = await http.get(Uri.parse(profilePicPath));
+        if (response.statusCode == 200) {
+          profileBytes = response.bodyBytes;
+        } else {
+          throw Exception('Failed to load image from URL');
+        }
+      } catch (e) {
+        // Fallback to default icon
+        return await _createPointerWithIconMarker();
+      }
+    } else if (profilePicPath.startsWith('/') || profilePicPath.startsWith('file://')) {
       // Local file
       profileBytes = await File(profilePicPath).readAsBytes();
     } else {
       // Asset
       profileBytes = (await rootBundle.load(profilePicPath)).buffer.asUint8List();
     }
+    
     final profileCodec = await ui.instantiateImageCodec(profileBytes, targetWidth: 150, targetHeight: 150);
     final profileFrame = await profileCodec.getNextFrame();
     final profileImage = profileFrame.image;
@@ -114,14 +130,26 @@ class MapViewState extends State<MapView> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
     try {
-      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/${user.uid}.jpg');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/profile_${user.uid}.jpg');
-      if (!await file.exists()) {
-        final data = await ref.getData();
-        if (data != null) await file.writeAsBytes(data);
+      // First try to get the profile picture URL from Firestore
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userData = userDoc.data();
+      final profilePicUrl = userData?['profilePicUrl'] ?? userData?['profilePic'];
+      
+      if (profilePicUrl != null && profilePicUrl.isNotEmpty) {
+        if (profilePicUrl.startsWith('http')) {
+          // It's already a URL, return it directly
+          return profilePicUrl;
+        } else {
+          // It's a Firebase Storage path, get the download URL
+          final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child(profilePicUrl);
+          return await ref.getDownloadURL();
+        }
       }
-      return file.path;
+      
+      // Fallback to the old method
+      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/${user.uid}.jpg');
+      final url = await ref.getDownloadURL();
+      return url;
     } catch (e) {
       return null;
     }
@@ -129,7 +157,7 @@ class MapViewState extends State<MapView> {
 
   Future<void> _loadProfilePointerMarkerWithFallback() async {
     final profilePicPath = await _fetchAndCacheProfilePic();
-    if (profilePicPath != null && File(profilePicPath).existsSync()) {
+    if (profilePicPath != null) {
       final marker = await createProfilePointerMarker(profilePicPath);
       setState(() {
         _profilePointerDescriptor = marker;

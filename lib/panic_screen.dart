@@ -104,19 +104,6 @@ class _TenSecondPanicScreenState extends State<TenSecondPanicScreen> {
                 onPressed: () {
                   _timer.cancel();
                   Navigator.of(context).pop();
-                  // showDialog(
-                  //   context: context,
-                  //   builder: (context) => AlertDialog(
-                  //     title: const Text('Location Permission Required'),
-                  //     content: const Text('Please enable location permissions in your device settings to use this feature.'),
-                  //     actions: [
-                  //       TextButton(
-                  //         onPressed: () => Navigator.of(context).pop(),
-                  //         child: const Text('OK'),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // );
                 },
                 style: ElevatedButton.styleFrom(
                   foregroundColor: Colors.white,
@@ -142,3 +129,11 @@ class _TenSecondPanicScreenState extends State<TenSecondPanicScreen> {
     );
   }
 }
+
+
+
+
+
+
+
+

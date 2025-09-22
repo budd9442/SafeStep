@@ -54,10 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _listenToPositionStream();
     _listenToDangerZones();
     
-    // Initialize SOS navigation service
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SosNavigationService.initialize(context);
-    });
+    // Channel initialized globally in main.dart
   }
 
   void _listenToDangerZones() {
@@ -554,10 +551,9 @@ class _ActiveContactAvatars extends StatelessWidget {
             for (final doc in docs)
               Padding(
                 padding: const EdgeInsets.only(right: 4.0),
-                child: _ContactAvatar(
+                child: _ActiveContactAvatar(
                   name: doc['name'] ?? '',
                   image: _getSafeImageField(doc),
-                  selected: false,
                 ),
               ),
             if (docs.length < contactIds.length)
@@ -606,7 +602,7 @@ class ShareLocationCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Share Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Color(0xFF232946))),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
@@ -649,6 +645,45 @@ class _TinyContactAvatar extends StatelessWidget {
       radius: 12,
       backgroundColor: color.withOpacity(0.15),
       child: Icon(icon, size: 16, color: color),
+    );
+  }
+}
+
+class _ActiveContactAvatar extends StatelessWidget {
+  final String name;
+  final String image;
+  const _ActiveContactAvatar({required this.name, required this.image});
+
+  Color _getColorForName(String name) {
+    final colors = Colors.primaries;
+    final hash = name.isNotEmpty ? name.codeUnits.reduce((a, b) => a + b) : 0;
+    return colors[hash % colors.length].shade400;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasImage = image.isNotEmpty;
+    final String initial = name.isNotEmpty ? name.trim()[0].toUpperCase() : '';
+    final Color? bgColor = hasImage ? null : _getColorForName(name);
+    
+    return CircleAvatar(
+      radius: 12,
+      backgroundColor: bgColor,
+      backgroundImage: hasImage && image.startsWith('http') 
+          ? NetworkImage(image)
+          : hasImage 
+              ? AssetImage(image) as ImageProvider
+              : null,
+      child: !hasImage
+          ? Text(
+              initial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            )
+          : null,
     );
   }
 }
@@ -855,7 +890,11 @@ class _ContactAvatar extends StatelessWidget {
                 child: CircleAvatar(
                   radius: 26,
                   backgroundColor: bgColor,
-                  backgroundImage: hasImage ? AssetImage(image) : null,
+                  backgroundImage: hasImage && image.startsWith('http') 
+                      ? NetworkImage(image)
+                      : hasImage 
+                          ? AssetImage(image) as ImageProvider
+                          : null,
                   child: !hasImage
                       ? Text(
                           initial,

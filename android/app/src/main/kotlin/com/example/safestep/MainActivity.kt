@@ -84,6 +84,18 @@ class MainActivity : FlutterActivity() {
     // Remove notification permission request and notification listener settings
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Ensure screen can turn on and show over lock screen for SOS
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
         // 1. Request location permission (all-time if possible)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             requestPermissions(
@@ -201,11 +213,29 @@ class MainActivity : FlutterActivity() {
         // Check if we need to open SOS screen
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("open_sos_screen", false)) {
-            // Clear the flag
-            prefs.edit().putBoolean("open_sos_screen", false).apply()
-            // Notify Flutter to open SOS screen
-            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+            val messenger = flutterEngine?.dartExecutor?.binaryMessenger
+            if (messenger != null) {
                 MethodChannel(messenger, SOS_CHANNEL).invokeMethod("openSosScreen", null)
+                // Clear the flag only after we successfully forwarded to Flutter
+                prefs.edit().putBoolean("open_sos_screen", false).apply()
+            } else {
+                // Keep the flag; we'll try again on next resume when engine is ready
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val isSosTrigger = intent.action == "com.example.safestep.OPEN_SOS_SCREEN" || intent.getBooleanExtra("open_sos_screen", false)
+        if (isSosTrigger) {
+            // Ensure Flutter opens the SOS screen immediately if engine ready; otherwise set flag
+            val messenger = flutterEngine?.dartExecutor?.binaryMessenger
+            if (messenger != null) {
+                MethodChannel(messenger, SOS_CHANNEL).invokeMethod("openSosScreen", null)
+            } else {
+                val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("open_sos_screen", true).apply()
             }
         }
     }

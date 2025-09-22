@@ -30,7 +30,7 @@ class ShakeDetectionService : Service(), SensorEventListener {
     private val deltaHistory = FloatArray(DELTA_HISTORY_SIZE)
     private val deltaTimeHistory = LongArray(DELTA_HISTORY_SIZE)
     private var deltaHistoryIndex = 0
-    private var isFakeCallActive = false
+    // Allow multiple SOS triggers; rely on debounce timing instead of a sticky guard
 
     override fun onCreate() {
         super.onCreate()
@@ -91,32 +91,38 @@ class ShakeDetectionService : Service(), SensorEventListener {
     }
 
     private fun onShakeDetected() {
-        if (!isFakeCallActive) {
-            isFakeCallActive = true
-            // Open SOS screen instead of triggering fake call
-            openSosScreen()
-        }
+        // Open SOS screen for every qualifying shake; SHAKE_DEBOUNCE_MS already prevents spam
+        openSosScreen()
     }
 
     private fun openSosScreen() {
         try {
-            // Create intent to open the app with SOS screen
+            // Persist flag; Flutter will open SOS once engine is ready (cold start safety)
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("open_sos_screen", true).apply()
+
+            // Create intent to open/bring app to foreground with SOS screen
             val intent = Intent(applicationContext, MainActivity::class.java).apply {
                 action = "com.example.safestep.OPEN_SOS_SCREEN"
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                 putExtra("open_sos_screen", true)
+                setPackage(packageName)
             }
-            
+
             // Start the activity
             startActivity(intent)
-            
+
             // Show notification that SOS screen was opened
             showEventNotification(
                 "SOS Screen Opened",
                 "Gesture detected - SOS screen opened"
             )
             
-            Log.d("ShakeDetectionService", "SOS screen opened from background service")
+            Log.d("ShakeDetectionService", "SOS screen intent sent from background service")
         } catch (e: Exception) {
             Log.e("ShakeDetectionService", "Error opening SOS screen: ${e.message}")
             // Fallback: show notification
@@ -129,9 +135,7 @@ class ShakeDetectionService : Service(), SensorEventListener {
 
     private val fakeCallActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.safestep.FAKE_CALL_ACCEPTED" || intent?.action == "com.example.safestep.FAKE_CALL_REJECTED") {
-                isFakeCallActive = false
-            }
+            // No-op for multiple shake behavior
         }
     }
 

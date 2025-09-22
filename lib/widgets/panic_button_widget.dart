@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:safestep/panic_screendart';
+import 'package:safestep/panic_screen.dart';
 
 class PanicButtonWidget extends StatefulWidget {
   const PanicButtonWidget({super.key});
