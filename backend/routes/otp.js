@@ -4,6 +4,102 @@ const { getFirestore, admin } = require('../config/firebase');
 
 const router = express.Router();
 
+// Request logging middleware for all routes
+router.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+  const userAgent = req.headers['user-agent'] || 'Unknown';
+  
+  console.log(`\n📥 [${timestamp}] ${req.method} ${req.originalUrl}`);
+  console.log(`🌐 Client IP: ${clientIP}`);
+  console.log(`📱 User Agent: ${userAgent}`);
+  console.log(`📋 Request Body:`, JSON.stringify(req.body, null, 2));
+  console.log(`🔗 Query Params:`, JSON.stringify(req.query, null, 2));
+  console.log(`📄 Headers:`, JSON.stringify(req.headers, null, 2));
+  
+  // Override res.json to log responses
+  const originalJson = res.json;
+  res.json = function(data) {
+    console.log(`\n📤 [${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Status: ${res.statusCode}`);
+    console.log(`📋 Response:`, JSON.stringify(data, null, 2));
+    return originalJson.call(this, data);
+  };
+  
+  next();
+});
+
+// Global error handler middleware
+router.use((error, req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.error(`\n❌ [${timestamp}] GLOBAL ERROR HANDLER`);
+  console.error(`🚨 Error Message:`, error.message);
+  console.error(`📊 Error Code:`, error.code || 'UNKNOWN');
+  console.error(`📋 Request Body:`, JSON.stringify(req.body, null, 2));
+  console.error(`📚 Stack Trace:`, error.stack);
+  
+  // Log axios errors with more detail
+  if (error.response) {
+    console.error(`🌐 HTTP Status:`, error.response.status);
+    console.error(`📄 Response Data:`, JSON.stringify(error.response.data, null, 2));
+    console.error(`📋 Response Headers:`, JSON.stringify(error.response.headers, null, 2));
+  }
+  
+  if (error.request) {
+    console.error(`📡 Request made but no response received:`, error.request);
+  }
+  
+  // Send error response
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      message: 'An unexpected error occurred',
+      timestamp: timestamp
+    });
+  }
+});
+
+// Logging utility functions
+const logRequest = (req, endpoint) => {
+  const timestamp = new Date().toISOString();
+  const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+  const userAgent = req.headers['user-agent'] || 'Unknown';
+  
+  console.log(`\n📥 [${timestamp}] ${req.method} ${endpoint}`);
+  console.log(`🌐 Client IP: ${clientIP}`);
+  console.log(`📱 User Agent: ${userAgent}`);
+  console.log(`📋 Request Body:`, JSON.stringify(req.body, null, 2));
+  console.log(`🔗 Query Params:`, JSON.stringify(req.query, null, 2));
+  console.log(`📄 Headers:`, JSON.stringify(req.headers, null, 2));
+};
+
+const logResponse = (req, endpoint, statusCode, responseData) => {
+  const timestamp = new Date().toISOString();
+  console.log(`\n📤 [${timestamp}] ${req.method} ${endpoint} - Status: ${statusCode}`);
+  console.log(`📋 Response:`, JSON.stringify(responseData, null, 2));
+};
+
+const logError = (req, endpoint, error, additionalInfo = {}) => {
+  const timestamp = new Date().toISOString();
+  console.error(`\n❌ [${timestamp}] ERROR in ${req.method} ${endpoint}`);
+  console.error(`🚨 Error Message:`, error.message);
+  console.error(`📊 Error Code:`, error.code || 'UNKNOWN');
+  console.error(`📋 Request Body:`, JSON.stringify(req.body, null, 2));
+  console.error(`🔍 Additional Info:`, JSON.stringify(additionalInfo, null, 2));
+  console.error(`📚 Stack Trace:`, error.stack);
+  
+  // Log axios errors with more detail
+  if (error.response) {
+    console.error(`🌐 HTTP Status:`, error.response.status);
+    console.error(`📄 Response Data:`, JSON.stringify(error.response.data, null, 2));
+    console.error(`📋 Response Headers:`, JSON.stringify(error.response.headers, null, 2));
+  }
+  
+  if (error.request) {
+    console.error(`📡 Request made but no response received:`, error.request);
+  }
+};
+
 // mspace API configuration
 const MSPACE_CONFIG = {
   baseURL: process.env.MSPACE_BASE_URL || 'https://api.mspace.lk',
@@ -43,7 +139,12 @@ const generateOTP = () => {
 
 // POST /api/otp/request - Request OTP
 router.post('/request', async (req, res) => {
+  const endpoint = '/api/otp/request';
+  
   try {
+    // Log incoming request
+    logRequest(req, endpoint);
+    
     const { phoneNumber, applicationMetaData } = req.body;
 
     // Validate input
@@ -177,45 +278,63 @@ router.post('/request', async (req, res) => {
     console.log('📱 Updated client last seen for:', formattedPhone);
 
     // Return success response
-    res.json({
+    const successResponse = {
       success: true,
       message: 'OTP sent successfully',
       reference: internalReference,
       expiresIn: 300, // 5 minutes in seconds
       phoneNumber: formattedPhone.replace('tel:', '') // Return clean phone number
-    });
+    };
+    
+    logResponse(req, endpoint, 200, successResponse);
+    res.json(successResponse);
 
   } catch (error) {
-    console.error('❌ OTP request error:', error.message);
+    // Log detailed error information
+    logError(req, endpoint, error, {
+      phoneNumber: req.body.phoneNumber,
+      timestamp: new Date().toISOString()
+    });
 
     if (error.response) {
       // mspace SMS API error
-      return res.status(400).json({
+      const errorResponse = {
         error: 'Failed to send SMS',
         code: 'MSPACE_SMS_ERROR',
         message: error.response.data?.statusDetail || 'SMS service unavailable'
-      });
+      };
+      logResponse(req, endpoint, 400, errorResponse);
+      return res.status(400).json(errorResponse);
     }
 
     if (error.code === 'ECONNABORTED') {
-      return res.status(408).json({
+      const errorResponse = {
         error: 'Request timeout',
         code: 'TIMEOUT',
         message: 'SMS service is taking too long to respond'
-      });
+      };
+      logResponse(req, endpoint, 408, errorResponse);
+      return res.status(408).json(errorResponse);
     }
 
-    res.status(500).json({
+    const errorResponse = {
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
       message: 'Failed to process OTP request'
-    });
+    };
+    logResponse(req, endpoint, 500, errorResponse);
+    res.status(500).json(errorResponse);
   }
 });
 
 // POST /api/otp/verify - Verify OTP
 router.post('/verify', async (req, res) => {
+  const endpoint = '/api/otp/verify';
+  
   try {
+    // Log incoming request
+    logRequest(req, endpoint);
+    
     const { reference, otp, phoneNumber } = req.body;
 
     // Validate input
@@ -369,7 +488,12 @@ router.get('/status/:reference', async (req, res) => {
 
 // POST /api/otp/register-client - Register phone number with client ID
 router.post('/register-client', async (req, res) => {
+  const endpoint = '/api/otp/register-client';
+  
   try {
+    // Log incoming request
+    logRequest(req, endpoint);
+    
     const { phoneNumber, clientId, clientInfo } = req.body;
 
     // Validate input
