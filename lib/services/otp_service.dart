@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class OTPService {
-  static const String _baseUrl = 'http://localhost:3000'; // Change this to your actual backend URL
+  static const String _baseUrl = 'http://budd.systems:9442'; // Change this to your actual backend URLtems
   static const Duration _timeout = Duration(seconds: 10);
 
   // Format phone number for Sri Lankan numbers
@@ -107,6 +107,37 @@ class OTPService {
       }
     } catch (e) {
       return OTPVerificationResponse.error(
+        code: 'NETWORK_ERROR',
+        message: 'Network error: ${e.toString()}',
+      );
+    }
+  }
+
+  // Check if user exists by phone number
+  static Future<UserExistenceResponse> checkUserExists(String phoneNumber) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/user/check/$phoneNumber'),
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(_timeout);
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return UserExistenceResponse.success(
+          exists: responseData['exists'] ?? false,
+          userData: responseData['userData'],
+        );
+      } else {
+        return UserExistenceResponse.error(
+          code: responseData['code'] ?? 'UNKNOWN_ERROR',
+          message: responseData['message'] ?? responseData['error'] ?? 'Failed to check user',
+        );
+      }
+    } catch (e) {
+      return UserExistenceResponse.error(
         code: 'NETWORK_ERROR',
         message: 'Network error: ${e.toString()}',
       );
@@ -381,6 +412,44 @@ class ClientRegistrationResponse {
     required String message,
   }) {
     return ClientRegistrationResponse._(
+      success: false,
+      code: code,
+      message: message,
+    );
+  }
+}
+
+class UserExistenceResponse {
+  final bool success;
+  final bool? exists;
+  final Map<String, dynamic>? userData;
+  final String? code;
+  final String? message;
+
+  UserExistenceResponse._({
+    required this.success,
+    this.exists,
+    this.userData,
+    this.code,
+    this.message,
+  });
+
+  factory UserExistenceResponse.success({
+    required bool exists,
+    Map<String, dynamic>? userData,
+  }) {
+    return UserExistenceResponse._(
+      success: true,
+      exists: exists,
+      userData: userData,
+    );
+  }
+
+  factory UserExistenceResponse.error({
+    required String code,
+    required String message,
+  }) {
+    return UserExistenceResponse._(
       success: false,
       code: code,
       message: message,

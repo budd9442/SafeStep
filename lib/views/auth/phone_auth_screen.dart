@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/otp_service.dart';
+import 'user_details_form_screen.dart';
 
 class PhoneAuthScreen extends StatefulWidget {
   final VoidCallback? onAuthSuccess;
@@ -88,10 +89,29 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       );
       
       if (verifyResponse.success) {
-        // Create or update user in Firebase
-        await _createOrUpdateUser(verifyResponse.phoneNumber!);
+        final phoneNumber = verifyResponse.phoneNumber!;
         
-        widget.onAuthSuccess?.call();
+        // Check if user exists
+        final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
+        
+        if (userExistsResponse.success && userExistsResponse.exists == true) {
+          // User exists - log them in
+          await _loginExistingUser(phoneNumber, userExistsResponse.userData);
+          widget.onAuthSuccess?.call();
+        } else {
+          // User doesn't exist - show details form
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UserDetailsFormScreen(
+                  phoneNumber: phoneNumber,
+                  onComplete: widget.onAuthSuccess,
+                ),
+              ),
+            );
+          }
+        }
       } else {
         setState(() { 
           _error = verifyResponse.message;
@@ -106,29 +126,27 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
-  Future<void> _createOrUpdateUser(String phoneNumber) async {
+  Future<void> _loginExistingUser(String phoneNumber, Map<String, dynamic>? userData) async {
     try {
-      // Create a custom token for Firebase Auth
-      final user = FirebaseAuth.instance.currentUser;
+      // Create anonymous user first
+      final userCredential = await FirebaseAuth.instance.signInAnonymously();
       
-      if (user == null) {
-        // Create anonymous user first
-        final userCredential = await FirebaseAuth.instance.signInAnonymously();
-        await userCredential.user?.updateDisplayName(_nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'User');
-      }
+      // Update display name from user data
+      final name = userData?['name'] ?? 'User';
+      await userCredential.user?.updateDisplayName(name);
       
-      // Store user data in Firestore
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user?.uid ?? 'anonymous');
+      // Update last login time
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid);
       await userDoc.set({
         'phoneNumber': phoneNumber,
-        'name': _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'User',
-        'createdAt': FieldValue.serverTimestamp(),
+        'name': name,
         'lastLoginAt': FieldValue.serverTimestamp(),
         'isVerified': true,
       }, SetOptions(merge: true));
       
     } catch (e) {
-      print('Error creating/updating user: $e');
+      print('Error logging in existing user: $e');
+      rethrow;
     }
   }
 
