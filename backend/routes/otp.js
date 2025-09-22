@@ -194,18 +194,22 @@ router.post('/request', async (req, res) => {
     console.log('✅ Client found in mappings:', formattedPhone, 'Client ID:', clientId);
 
     // Check if OTP was already requested recently (within 1 minute)
-    const recentOtpQuery = await db.collection('otp_requests')
-      .where('phoneNumber', '==', formattedPhone)
-      .where('createdAt', '>', new Date(Date.now() - 60000)) // 1 minute ago
-      .limit(1)
-      .get();
+    // Use phone number as document ID for single record per phone number
+    const phoneDocId = formattedPhone.replace('tel:', '').replace(/[^a-zA-Z0-9]/g, '_');
+    const existingOtpDoc = await db.collection('otp_requests').doc(phoneDocId).get();
 
-    if (!recentOtpQuery.empty) {
-      return res.status(429).json({
-        error: 'OTP already requested recently',
-        code: 'OTP_RATE_LIMITED',
-        message: 'Please wait before requesting another OTP'
-      });
+    if (existingOtpDoc.exists) {
+      const existingData = existingOtpDoc.data();
+      const lastRequestTime = existingData.createdAt.toDate();
+      const timeSinceLastRequest = Date.now() - lastRequestTime.getTime();
+      
+      if (timeSinceLastRequest < 60000) { // 1 minute
+        return res.status(429).json({
+          error: 'OTP already requested recently',
+          code: 'OTP_RATE_LIMITED',
+          message: 'Please wait before requesting another OTP'
+        });
+      }
     }
 
     // Generate random OTP
@@ -252,7 +256,7 @@ router.post('/request', async (req, res) => {
 
     const mspaceReference = mspaceResponse.data.referenceNo || internalReference;
 
-    // Store OTP request in Firebase
+    // Store OTP request in Firebase using phone number as document ID
     const otpData = {
       phoneNumber: formattedPhone,
       clientId: clientId, // Store the client ID used for SMS
@@ -264,10 +268,19 @@ router.post('/request', async (req, res) => {
       maxAttempts: 3,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
-      smsMessage: smsMessage // Store the SMS message sent
+      smsMessage: smsMessage, // Store the SMS message sent
+      // Add history tracking for audit purposes
+      requestHistory: admin.firestore.FieldValue.arrayUnion({
+        internalReference: internalReference,
+        mspaceReference: mspaceReference,
+        generatedOTP: generatedOTP,
+        createdAt: new Date(),
+        status: 'sent'
+      })
     };
 
-    await db.collection('otp_requests').doc(internalReference).set(otpData);
+    // Use phone number as document ID to ensure single record per phone number
+    await db.collection('otp_requests').doc(phoneDocId).set(otpData, { merge: true });
 
     // Update client's last seen timestamp
     await clientQuery.docs[0].ref.update({
@@ -283,7 +296,8 @@ router.post('/request', async (req, res) => {
       message: 'OTP sent successfully',
       reference: internalReference,
       expiresIn: 300, // 5 minutes in seconds
-      phoneNumber: formattedPhone.replace('tel:', '') // Return clean phone number
+      phoneNumber: formattedPhone.replace('tel:', ''), // Return clean phone number
+      documentId: phoneDocId // Return the document ID for direct access
     };
     
     logResponse(req, endpoint, 200, successResponse);
@@ -353,15 +367,53 @@ router.post('/verify', async (req, res) => {
       });
     }
 
-    // Get OTP request from Firebase
+    // Get OTP request from Firebase using phone number as document ID
     const db = getFirestore();
-    const otpDoc = await db.collection('otp_requests').doc(reference).get();
+    
+    // If phoneNumber is provided, use it directly; otherwise, we need to find it by reference
+    let phoneDocId;
+    if (phoneNumber) {
+      // Handle tel: format for phone number
+      let formattedPhone;
+      if (phoneNumber.startsWith('tel:')) {
+        formattedPhone = phoneNumber;
+      } else {
+        formattedPhone = validatePhoneNumber(phoneNumber);
+        if (!formattedPhone) {
+          return res.status(400).json({
+            error: 'Invalid phone number format',
+            code: 'INVALID_PHONE_NUMBER',
+            message: 'Please provide a valid Sri Lankan mobile number or tel: format'
+          });
+        }
+      }
+      phoneDocId = formattedPhone.replace('tel:', '').replace(/[^a-zA-Z0-9]/g, '_');
+    } else {
+      // Fallback: search by reference in requestHistory (for backward compatibility)
+      const otpQuery = await db.collection('otp_requests')
+        .where('internalReference', '==', reference)
+        .limit(1)
+        .get();
+      
+      if (otpQuery.empty) {
+        return res.status(404).json({
+          error: 'OTP request not found',
+          code: 'OTP_NOT_FOUND',
+          message: 'Invalid reference number'
+        });
+      }
+      
+      const otpData = otpQuery.docs[0].data();
+      phoneDocId = otpData.phoneNumber.replace('tel:', '').replace(/[^a-zA-Z0-9]/g, '_');
+    }
+    
+    const otpDoc = await db.collection('otp_requests').doc(phoneDocId).get();
 
     if (!otpDoc.exists) {
       return res.status(404).json({
         error: 'OTP request not found',
         code: 'OTP_NOT_FOUND',
-        message: 'Invalid reference number'
+        message: 'No active OTP request found for this phone number'
       });
     }
 
@@ -395,7 +447,7 @@ router.post('/verify', async (req, res) => {
     }
 
     // Increment attempts
-    await db.collection('otp_requests').doc(reference).update({
+    await db.collection('otp_requests').doc(phoneDocId).update({
       attempts: admin.firestore.FieldValue.increment(1),
       lastAttemptAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -404,11 +456,19 @@ router.post('/verify', async (req, res) => {
 
     // Verify OTP against stored value
     if (otp !== otpData.generatedOTP) {
-      // Update status to failed
-      await db.collection('otp_requests').doc(reference).update({
+      // Update status to failed and add to history
+      await db.collection('otp_requests').doc(phoneDocId).update({
         status: 'failed',
         verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-        failureReason: 'Invalid OTP provided'
+        failureReason: 'Invalid OTP provided',
+        requestHistory: admin.firestore.FieldValue.arrayUnion({
+          internalReference: otpData.internalReference,
+          mspaceReference: otpData.mspaceReference,
+          generatedOTP: otpData.generatedOTP,
+          verifiedAt: new Date(),
+          status: 'failed',
+          failureReason: 'Invalid OTP provided'
+        })
       });
 
       return res.status(400).json({
@@ -420,10 +480,18 @@ router.post('/verify', async (req, res) => {
     }
 
     // OTP verification successful
-    await db.collection('otp_requests').doc(reference).update({
+    await db.collection('otp_requests').doc(phoneDocId).update({
       status: 'verified',
       verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-      verifiedOtp: otp
+      verifiedOtp: otp,
+      requestHistory: admin.firestore.FieldValue.arrayUnion({
+        internalReference: otpData.internalReference,
+        mspaceReference: otpData.mspaceReference,
+        generatedOTP: otpData.generatedOTP,
+        verifiedAt: new Date(),
+        status: 'verified',
+        verifiedOtp: otp
+      })
     });
 
     console.log('✅ OTP verified successfully for:', otpData.phoneNumber);
@@ -448,18 +516,35 @@ router.post('/verify', async (req, res) => {
   }
 });
 
-// GET /api/otp/status/:reference - Check OTP status
-router.get('/status/:reference', async (req, res) => {
+// GET /api/otp/status/:phoneNumber - Check OTP status by phone number
+router.get('/status/:phoneNumber', async (req, res) => {
   try {
-    const { reference } = req.params;
+    const { phoneNumber } = req.params;
 
+    // Handle tel: format for phone number
+    let formattedPhone;
+    if (phoneNumber.startsWith('tel:')) {
+      formattedPhone = phoneNumber;
+    } else {
+      formattedPhone = validatePhoneNumber(phoneNumber);
+      if (!formattedPhone) {
+        return res.status(400).json({
+          error: 'Invalid phone number format',
+          code: 'INVALID_PHONE_NUMBER',
+          message: 'Please provide a valid Sri Lankan mobile number or tel: format'
+        });
+      }
+    }
+
+    const phoneDocId = formattedPhone.replace('tel:', '').replace(/[^a-zA-Z0-9]/g, '_');
     const db = getFirestore();
-    const otpDoc = await db.collection('otp_requests').doc(reference).get();
+    const otpDoc = await db.collection('otp_requests').doc(phoneDocId).get();
 
     if (!otpDoc.exists) {
       return res.status(404).json({
         error: 'OTP request not found',
-        code: 'OTP_NOT_FOUND'
+        code: 'OTP_NOT_FOUND',
+        message: 'No OTP request found for this phone number'
       });
     }
 
@@ -467,18 +552,64 @@ router.get('/status/:reference', async (req, res) => {
     const isExpired = new Date() > otpData.expiresAt.toDate();
 
     res.json({
-      reference: reference,
-      status: isExpired ? 'expired' : otpData.status,
       phoneNumber: otpData.phoneNumber.replace('tel:', ''),
+      status: isExpired ? 'expired' : otpData.status,
       attempts: otpData.attempts,
       maxAttempts: otpData.maxAttempts,
       createdAt: otpData.createdAt.toDate().toISOString(),
       expiresAt: otpData.expiresAt.toDate().toISOString(),
-      isExpired: isExpired
+      isExpired: isExpired,
+      currentReference: otpData.internalReference,
+      requestHistory: otpData.requestHistory || []
     });
 
   } catch (error) {
     console.error('❌ Status check error:', error.message);
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// GET /api/otp/status-by-reference/:reference - Check OTP status by reference (backward compatibility)
+router.get('/status-by-reference/:reference', async (req, res) => {
+  try {
+    const { reference } = req.params;
+
+    const db = getFirestore();
+    
+    // Search for the reference in requestHistory across all documents
+    const otpQuery = await db.collection('otp_requests')
+      .where('internalReference', '==', reference)
+      .limit(1)
+      .get();
+
+    if (otpQuery.empty) {
+      return res.status(404).json({
+        error: 'OTP request not found',
+        code: 'OTP_NOT_FOUND',
+        message: 'Invalid reference number'
+      });
+    }
+
+    const otpData = otpQuery.docs[0].data();
+    const isExpired = new Date() > otpData.expiresAt.toDate();
+
+    res.json({
+      reference: reference,
+      phoneNumber: otpData.phoneNumber.replace('tel:', ''),
+      status: isExpired ? 'expired' : otpData.status,
+      attempts: otpData.attempts,
+      maxAttempts: otpData.maxAttempts,
+      createdAt: otpData.createdAt.toDate().toISOString(),
+      expiresAt: otpData.expiresAt.toDate().toISOString(),
+      isExpired: isExpired,
+      documentId: otpData.phoneNumber.replace('tel:', '').replace(/[^a-zA-Z0-9]/g, '_')
+    });
+
+  } catch (error) {
+    console.error('❌ Status check by reference error:', error.message);
     res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR'
