@@ -198,46 +198,7 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                   ),
                 ),
 
-                // Information Section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                    child: _buildSectionHeader('Information', Icons.info),
-                  ),
-                ),
                 
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.85,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    delegate: SliverChildListDelegate([
-                      _ModernMenuCard(
-                        icon: Icons.info_outline,
-                        label: 'About Us',
-                        subtitle: 'Learn more about SafeStep',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFfa709a), Color(0xFFfee140)],
-                        ),
-                        onTap: () => _openFeature(const AboutUsView()),
-                      ),
-                      _ModernMenuCard(
-                        icon: Icons.bug_report,
-                        label: 'Debug',
-                        subtitle: 'Activity monitoring',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFa8edea), Color(0xFFfed6e3)],
-                        ),
-                        onTap: () => _openFeature(const ActivityMonitorView()),
-                      ),
-                    ]),
-                  ),
-                ),
-
                 // Bottom spacing
                 const SliverToBoxAdapter(
                   child: SizedBox(height: 32),
