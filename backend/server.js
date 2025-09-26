@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const otpRoutes = require('./routes/otp');
+const userRoutes = require('./routes/user');
 const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
@@ -51,6 +52,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/otp', otpRateLimit, otpRoutes);
+app.use('/api/user', userRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
