@@ -98,6 +98,8 @@ flutter:
     - .env
     - assets/login.png
     - assets/pointer.png
+    - assets/img3.png
+    - assets/screen.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

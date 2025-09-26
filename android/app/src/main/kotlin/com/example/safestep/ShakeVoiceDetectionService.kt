@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.example.safestep.FakeCallUtils
 
 class ShakeDetectionService : Service(), SensorEventListener {
+    private var userMaxGestureValue: Float = Float.POSITIVE_INFINITY
     private lateinit var sensorManager: SensorManager
     private var accelLast = 0f
     private var shakeTimestamp: Long = 0
@@ -32,7 +33,54 @@ class ShakeDetectionService : Service(), SensorEventListener {
     private var deltaHistoryIndex = 0
     // Allow multiple SOS triggers; rely on debounce timing instead of a sticky guard
 
+    companion object {
+        // Static method to record shake gesture for 30 seconds and return max value
+        fun recordShakeGesture(context: Context, callback: (Float?, String?) -> Unit) {
+            try {
+                val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+                if (accelSensor == null) {
+                    Log.e("ShakeDetectionService", "No accelerometer sensor available")
+                    callback(null, "No accelerometer sensor available")
+                    return
+                }
+                var accelLast = SensorManager.GRAVITY_EARTH
+                var maxDelta = 0f
+                val listener = object : SensorEventListener {
+                    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+                    override fun onSensorChanged(event: SensorEvent?) {
+                        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+                            val x = event.values[0]
+                            val y = event.values[1]
+                            val z = event.values[2]
+                            val accelCurrent = Math.sqrt((x * x + y * y + z * z).toDouble()).toFloat()
+                            val delta = Math.abs(accelCurrent - accelLast)
+                            accelLast = accelCurrent
+                            if (delta > maxDelta) maxDelta = delta
+                        }
+                    }
+                }
+                sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_UI)
+                android.os.Handler(context.mainLooper).postDelayed({
+                    sensorManager.unregisterListener(listener)
+                    Log.d("ShakeDetectionService", "Gesture recording finished, maxDelta=$maxDelta")
+                    callback(maxDelta, null)
+                }, 10000)
+            } catch (e: Exception) {
+                Log.e("ShakeDetectionService", "Error recording gesture: ${e.message}")
+                callback(null, "Error recording gesture: ${e.message}")
+            }
+        }
+    }
+
     override fun onCreate() {
+        // Load user's recorded max gesture value from SharedPreferences
+        val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        if (prefs.contains("user_max_gesture_value")) {
+            userMaxGestureValue = prefs.getFloat("user_max_gesture_value", Float.POSITIVE_INFINITY)
+        } else {
+            userMaxGestureValue = Float.POSITIVE_INFINITY
+        }
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -68,23 +116,18 @@ class ShakeDetectionService : Service(), SensorEventListener {
             deltaHistory[deltaHistoryIndex] = delta
             deltaTimeHistory[deltaHistoryIndex] = now
             deltaHistoryIndex = (deltaHistoryIndex + 1) % DELTA_HISTORY_SIZE
-            if (delta > 7f && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
+
+            // Only show notification and send SOS if delta exceeds user's max gesture value
+            if (delta > userMaxGestureValue && now - lastNotificationTime > NOTIFICATION_INTERVAL_MS) {
                 lastNotificationTime = now
                 showEventNotification(
-                    "Shake detection active",
-                    "delta=%.2f, thresh=7".format(delta)
+                    "Maximum Gesture Exceeded",
+                    "delta=%.2f exceeded user max %.2f".format(delta, userMaxGestureValue)
                 )
-            }
-            var count = 0
-            for (i in 0 until DELTA_HISTORY_SIZE) {
-                if (now - deltaTimeHistory[i] <= 1500L && deltaHistory[i] > 4.5f) {
-                    count++
-                }
-            }
-            if (count >= 2 && delta > 4.5f) {
+                // Only trigger SOS if delta exceeds user's max
                 if (now - shakeTimestamp > SHAKE_DEBOUNCE_MS) {
                     shakeTimestamp = now
-                    onShakeDetected()
+                    openSosScreen()
                 }
             }
         }

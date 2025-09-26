@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:safestep/views/onboarding_screens.dart';
 import '../../services/otp_service.dart';
 import '../../services/local_session.dart';
-import '../../home_screen.dart';
-import 'user_details_form_screen.dart';
+
 
 class PhoneAuthScreen extends StatefulWidget {
   final VoidCallback? onAuthSuccess;
@@ -76,84 +76,174 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
-  Future<void> _verifyOTP() async {
-    if (_otpReference == null) return;
+  // Future<void> _verifyOTP() async {
+  //   if (_otpReference == null) return;
     
-    setState(() { _loading = true; _error = null; });
+  //   setState(() { _loading = true; _error = null; });
     
-    try {
-      // Use custom backend OTP verification
-      final verifyResponse = await OTPService.verifyOTP(
-        reference: _otpReference!,
-        otp: _otpController.text.trim(),
-      );
+  //   try {
+  //     // Use custom backend OTP verification
+  //     final verifyResponse = await OTPService.verifyOTP(
+  //       reference: _otpReference!,
+  //       otp: _otpController.text.trim(),
+  //     );
       
-      if (verifyResponse.success) {
-        final phoneNumber = verifyResponse.phoneNumber!;
-        print('✅ OTP verified successfully for: $phoneNumber');
+  //     if (verifyResponse.success) {
+  //       final phoneNumber = verifyResponse.phoneNumber!;
+  //       print('✅ OTP verified successfully for: $phoneNumber');
         
-        // Check if user exists
-        print('🔍 Checking if user exists...');
-        final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
-        print('📋 User exists response: ${userExistsResponse.success}, exists: ${userExistsResponse.exists}');
+  //       // Check if user exists
+  //       print('🔍 Checking if user exists...');
+  //       final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
+  //       print('📋 User exists response: ${userExistsResponse.success}, exists: ${userExistsResponse.exists}');
         
-        if (userExistsResponse.success && userExistsResponse.exists == true) {
-          // User exists - log them in
-          print('👤 User exists, logging in with data: ${userExistsResponse.userData}');
-          await _loginExistingUser(phoneNumber, userExistsResponse.userData);
+  //     //   if (userExistsResponse.success && userExistsResponse.exists == true) {
+  //     //     // User exists - log them in
+  //     //     print('👤 User exists, logging in with data: ${userExistsResponse.userData}');
+  //     //     await _loginExistingUser(phoneNumber, userExistsResponse.userData);
 
-          if (!mounted) return;
+  //     //     if (!mounted) return;
 
-          // Fire the callback so AuthGate can rebuild
-          print('🔄 Calling onAuthSuccess for existing user');
-          widget.onAuthSuccess?.call();
-          print('🔄 onAuthSuccess called for existing user');
+  //     //     // Fire the callback so AuthGate can rebuild
+  //     //     print('🔄 Calling onAuthSuccess for existing user');
+  //     //     widget.onAuthSuccess?.call();
+  //     //     print('🔄 onAuthSuccess called for existing user');
 
-          // Stop loading and navigate directly as a fallback
-          setState(() => _loading = false);
-          print('🔄 Navigating directly to home screen for existing user');
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-            (route) => false,
-          );
-        } else {
-          // User doesn't exist - show details form
-          print('👤 User does not exist, showing registration form');
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => UserDetailsFormScreen(
-                  phoneNumber: phoneNumber,
-                  onComplete: () {
-                    if (mounted) {
-                      print('🔄 UserDetailsFormScreen onComplete called');
-                      widget.onAuthSuccess?.call();
-                      print('🔄 onAuthSuccess callback called');
-                    }
-                  },
-                ),
-              ),
-            );
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() { 
-            _error = verifyResponse.message;
-            _loading = false;
-          });
-        }
-      }
-    } catch (e) {
+  //     //     // Stop loading and navigate directly as a fallback
+  //     //     setState(() => _loading = false);
+  //     //     print('🔄 Navigating directly to home screen for existing user');
+  //     //     Navigator.of(context).pushAndRemoveUntil(
+  //     //       MaterialPageRoute(builder: (_) => const HomeScreen()),
+  //     //       (route) => false,
+  //     //     );
+  //     //   } else {
+  //     //     // User doesn't exist - show details form
+  //     //     print('👤 User does not exist, showing registration form');
+  //     //     if (mounted) {
+  //     //       Navigator.pushReplacement(
+  //     //         context,
+  //     //         MaterialPageRoute(
+  //     //           builder: (context) => UserDetailsFormScreen(
+  //     //             phoneNumber: phoneNumber,
+  //     //             onComplete: () {
+  //     //               if (mounted) {
+  //     //                 print('🔄 UserDetailsFormScreen onComplete called');
+  //     //                 widget.onAuthSuccess?.call();
+  //     //                 print('🔄 onAuthSuccess callback called');
+  //     //               }
+  //     //             },
+  //     //           ),
+  //     //         ),
+  //     //       );
+  //     //     }
+  //     //   }
+  //     // } 
+  //     if (userExistsResponse.success) {
+  //       print('👤 Showing user details screen (new or existing user)');
+  //       if (mounted) {
+  //         Navigator.pushReplacement(
+  //           context,
+  //           MaterialPageRoute(
+  //             builder: (context) => UserDetailsFormScreen(
+  //               phoneNumber: phoneNumber,
+  //               onComplete: () {
+  //                 if (mounted) {
+  //                   print('🔄 UserDetailsFormScreen onComplete called');
+  //                   widget.onAuthSuccess?.call();
+  //                   print('🔄 onAuthSuccess callback called');
+  //                 }
+  //               },
+  //             ),
+  //           ),
+  //         );
+  //       }
+  //     } else {
+  //         // User doesn't exist - show details form
+  //         print('👤 User does not exist, showing registration form');
+  //         if (mounted) {
+  //           Navigator.pushReplacement(
+  //             context,
+  //             MaterialPageRoute(
+  //               builder: (context) => UserDetailsFormScreen(
+  //                 phoneNumber: phoneNumber,
+  //                 onComplete: () {
+  //                   if (mounted) {
+  //                     print('🔄 UserDetailsFormScreen onComplete called');
+  //                     widget.onAuthSuccess?.call();
+  //                     print('🔄 onAuthSuccess callback called');
+  //                   }
+  //                 },
+  //               ),
+  //             ),
+  //           );
+  //         }
+  //       }
+  //     } 
+  //     else {
+  //       if (mounted) {
+  //         setState(() { 
+  //           _error = verifyResponse.message;
+  //           _loading = false;
+  //         });
+  //       }
+  //     }
+  //   } catch (e) {
+  //     if (mounted) {
+  //       setState(() { 
+  //         _error = 'Failed to verify OTP: ${e.toString()}';
+  //         _loading = false;
+  //       });
+  //     }
+  //   }
+  // }
+  Future<void> _verifyOTP() async {
+  if (_otpReference == null) return;
+
+  setState(() {
+    _loading = true;
+    _error = null;
+  });
+
+  try {
+    final verifyResponse = await OTPService.verifyOTP(
+      reference: _otpReference!,
+      otp: _otpController.text.trim(),
+    );
+
+    if (verifyResponse.success) {
+      final phoneNumber = verifyResponse.phoneNumber!;
+      print('✅ OTP verified successfully for: $phoneNumber');
+
+      // ✅ Navigate to Onboarding screen after OTP
       if (mounted) {
-        setState(() { 
-          _error = 'Failed to verify OTP: ${e.toString()}';
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OnboardingScreen(
+              phoneNumber: phoneNumber,
+              onAuthSuccess: widget.onAuthSuccess,
+            ),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _error = verifyResponse.message;
           _loading = false;
         });
       }
     }
+  } catch (e) {
+    if (mounted) {
+      setState(() {
+        _error = 'Failed to verify OTP: ${e.toString()}';
+        _loading = false;
+      });
+    }
   }
+}
+
 
   Future<void> _loginExistingUser(String phoneNumber, Map<String, dynamic>? userData) async {
     try {

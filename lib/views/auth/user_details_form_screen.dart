@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import '../../home_screen.dart';
 
 class UserDetailsFormScreen extends StatefulWidget {
   final String phoneNumber;
   final VoidCallback? onComplete;
-  
+
   const UserDetailsFormScreen({
     super.key,
     required this.phoneNumber,
@@ -25,6 +27,11 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
   bool _loading = false;
   String? _error;
 
+  // Gesture recording fields
+  bool _gestureRecorded = false;
+  double? _maxGestureValue;
+  // Removed unused _accelerometerSubscription
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,8 +44,6 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 32),
-                
-                // Header
                 Center(
                   child: Column(
                     children: [
@@ -49,11 +54,7 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                           color: const Color(0xFF7B3FA0).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(40),
                         ),
-                        child: const Icon(
-                          Icons.person_add,
-                          size: 40,
-                          color: Color(0xFF7B3FA0),
-                        ),
+                        child: const Icon(Icons.person_add, size: 40, color: Color(0xFF7B3FA0)),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -67,19 +68,14 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'We need a few more details to get you started',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey.shade600,
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                         textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
-                
                 const SizedBox(height: 32),
-                
-                // Phone number display (read-only)
+                // Phone number display
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -93,10 +89,7 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                       const SizedBox(width: 12),
                       Text(
                         'Phone: ${widget.phoneNumber}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                       const Spacer(),
                       Container(
@@ -107,19 +100,13 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                         ),
                         child: const Text(
                           'Verified',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
                   ),
                 ),
-                
                 const SizedBox(height: 24),
-                
                 // Name field
                 TextFormField(
                   controller: _nameController,
@@ -127,23 +114,15 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                     labelText: 'Full Name *',
                     hintText: 'Enter your full name',
                     prefixIcon: const Icon(Icons.person),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Name is required';
-                    }
-                    if (value.trim().length < 2) {
-                      return 'Name must be at least 2 characters';
-                    }
+                    if (value == null || value.trim().isEmpty) return 'Name is required';
+                    if (value.trim().length < 2) return 'Name must be at least 2 characters';
                     return null;
                   },
                 ),
-                
                 const SizedBox(height: 16),
-                
                 // Email field
                 TextFormField(
                   controller: _emailController,
@@ -151,9 +130,7 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                     labelText: 'Email Address',
                     hintText: 'Enter your email (optional)',
                     prefixIcon: const Icon(Icons.email),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -165,32 +142,48 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                     return null;
                   },
                 ),
-                
                 const SizedBox(height: 16),
-                
-                // Date of Birth field
+                // DOB field
                 TextFormField(
                   controller: _dobController,
                   decoration: InputDecoration(
                     labelText: 'Date of Birth',
                     hintText: 'Select your date of birth (optional)',
                     prefixIcon: const Icon(Icons.calendar_today),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.calendar_month),
-                      onPressed: _selectDate,
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    suffixIcon: IconButton(icon: const Icon(Icons.calendar_month), onPressed: _selectDate),
                   ),
                   readOnly: true,
                   onTap: _selectDate,
                 ),
-                
+                const SizedBox(height: 24),
+                // Gesture recording section
+                GestureDetector(
+                  onTap: _recordGesture,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _gestureRecorded ? Colors.green.shade100 : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _gestureRecorded
+                              ? 'Gesture Recorded ✅ (Value: ${_maxGestureValue?.toStringAsFixed(2)})'
+                              : 'Tap to record shake gesture',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        Icon(_gestureRecorded ? Icons.check : Icons.gesture),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 32),
-                
                 // Error message
-                if (_error != null) ...[
+                if (_error != null)
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -202,53 +195,27 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
                       children: [
                         Icon(Icons.error_outline, color: Colors.red.shade600, size: 20),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: TextStyle(color: Colors.red.shade700),
-                          ),
-                        ),
+                        Expanded(child: Text(_error!, style: TextStyle(color: Colors.red.shade700))),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ],
-                
-                // Complete button
+                const SizedBox(height: 16),
+                // Save button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _completeRegistration,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7B3FA0),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: _loading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
-                            'Complete Registration',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                            'Save Information',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Skip option
-                Center(
-                  child: TextButton(
-                    onPressed: _loading ? null : _skipDetails,
-                    child: const Text(
-                      'Skip for now',
-                      style: TextStyle(color: Color(0xFF7B3FA0)),
-                    ),
                   ),
                 ),
               ],
@@ -260,14 +227,13 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
   }
 
   Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)), // Default to 18 years ago
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
-    
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null) {
       setState(() {
         _selectedDate = picked;
         _dobController.text = '${picked.day}/${picked.month}/${picked.year}';
@@ -275,92 +241,120 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
     }
   }
 
+  Future<void> _recordGesture() async {
+    // Inform user
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("Record Shake Gesture"),
+        content: const Text("Shake your phone for 30 seconds."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Start")),
+        ],
+      ),
+    );
+
+    // Use platform channel to record shake gesture
+    double? maxDelta;
+    try {
+      final platform = MethodChannel('com.example.safestep/shake_gesture');
+      final result = await platform.invokeMethod('recordShakeGesture');
+      if (result is double) {
+        maxDelta = result;
+      } else if (result is int) {
+        maxDelta = result.toDouble();
+      }
+    } on PlatformException catch (e) {
+      setState(() { _error = "Failed to record gesture: ${e.message}"; });
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Gesture Recording Error"),
+          content: Text("${e.message}"),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+          ],
+        ),
+      );
+      return;
+    } catch (e) {
+      setState(() { _error = "Failed to record gesture: $e"; });
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Gesture Recording Error"),
+          content: Text("$e"),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+          ],
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _gestureRecorded = true;
+      _maxGestureValue = maxDelta;
+    });
+
+    // Show recorded value
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Gesture Recorded"),
+        content: Text("Maximum detected gesture value: ${maxDelta?.toStringAsFixed(2)}"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
+    );
+  }
+
   Future<void> _completeRegistration() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    setState(() { _loading = true; _error = null; });
-    
-    try {
-      await _createUser();
-      if (mounted) {
-        setState(() { _loading = false; });
-        print('✅ User registration completed, calling onComplete');
-        widget.onComplete?.call();
-        print('✅ onComplete callback called');
-        
-        // Also navigate directly to home screen as backup
-        print('🔄 Navigating directly to home screen');
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to create account: ${e.toString()}';
-          _loading = false;
-        });
-      }
+    if (!_gestureRecorded) {
+      setState(() => _error = "Please record your shake gesture before saving.");
+      return;
     }
-  }
 
-  Future<void> _skipDetails() async {
     setState(() { _loading = true; _error = null; });
-    
-    try {
-      await _createUser();
-      if (mounted) {
-        setState(() { _loading = false; });
-        print('✅ User registration completed (skip), calling onComplete');
-        widget.onComplete?.call();
-        print('✅ onComplete callback called (skip)');
-        
-        // Also navigate directly to home screen as backup
-        print('🔄 Navigating directly to home screen (skip)');
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to create account: ${e.toString()}';
-          _loading = false;
-        });
-      }
-    }
-  }
 
-  Future<void> _createUser() async {
     try {
-      // Create user document in Firestore without Firebase Auth
       final userData = {
         'phoneNumber': widget.phoneNumber,
-        'name': _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'User',
+        'name': _nameController.text.trim(),
         'email': _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
         'dateOfBirth': _selectedDate != null ? Timestamp.fromDate(_selectedDate!) : null,
+        'gestureRecorded': _gestureRecorded,
+        'maxGestureValue': _maxGestureValue,
         'createdAt': FieldValue.serverTimestamp(),
-        'lastLoginAt': FieldValue.serverTimestamp(),
-        'isVerified': true,
-        'profileComplete': _nameController.text.trim().isNotEmpty,
-        'isAuthenticated': true,
-        'sessionId': DateTime.now().millisecondsSinceEpoch.toString(),
       };
-      
-      // Remove null values
       userData.removeWhere((key, value) => value == null);
-      
-      // Store user data in Firestore with phone number as document ID
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(widget.phoneNumber.replaceAll(RegExp(r'[^\d]'), ''));
-      await userDoc.set(userData, SetOptions(merge: true));
-      
-      print('✅ User created successfully');
-      
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.phoneNumber)
+          .set(userData, SetOptions(merge: true));
+
+      // Save max gesture value to Android SharedPreferences for service use
+      if (_maxGestureValue != null) {
+        try {
+          const platform = MethodChannel('com.example.safestep/prefs');
+          await platform.invokeMethod('saveUserMaxGesture', {
+            'maxGestureValue': _maxGestureValue,
+          });
+        } catch (e) {
+          // Ignore errors, not critical for user save
+        }
+      }
+
+      widget.onComplete?.call();
+      Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()), (_) => false);
     } catch (e) {
-      print('Error creating user: $e');
-      rethrow;
+      setState(() { _error = "Failed to save user info: $e"; });
+    } finally {
+      setState(() { _loading = false; });
     }
   }
 }

@@ -65,16 +65,38 @@ class MainActivity : FlutterActivity() {
                         .apply()
                     result.success(null)
                 }
+                "saveUserMaxGesture" -> {
+                    val maxGestureValue = call.argument<Double>("maxGestureValue")?.toFloat() ?: 0f
+                    val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putFloat("user_max_gesture_value", maxGestureValue).apply()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
-        
+
         // Add SOS channel for opening SOS screen
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openSosScreen" -> {
                     // This will be handled by Flutter side
                     result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Add shake gesture channel for recording gesture
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.safestep/shake_gesture").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "recordShakeGesture" -> {
+                    ShakeDetectionService.recordShakeGesture(this) { maxDelta, error ->
+                        if (error != null) {
+                            result.error("SENSOR_ERROR", error, null)
+                        } else {
+                            result.success(maxDelta)
+                        }
+                    }
                 }
                 else -> result.notImplemented()
             }
