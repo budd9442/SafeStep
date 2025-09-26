@@ -203,6 +203,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:safestep/home_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:safestep/services/sos_navigation_service.dart';
+import 'package:safestep/services/native_background_location_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -215,6 +216,18 @@ void main() async {
   // Request notification permission on Android 13+
   try {
     await Permission.notification.request();
+  } catch (_) {}
+
+  // Request location permissions
+  try {
+    await Permission.location.request();
+    await Permission.locationAlways.request();
+  } catch (_) {}
+
+  // Start native background location service
+  try {
+    await NativeBackgroundLocationService.initialize();
+    await NativeBackgroundLocationService.startTracking();
   } catch (_) {}
 
   // Debug: Check if required environment variables are loaded

@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const otpRoutes = require('./routes/otp');
 const userRoutes = require('./routes/user');
+const locationRoutes = require('./routes/location');
 const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
@@ -53,6 +54,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/otp', otpRateLimit, otpRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/location', locationRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -80,10 +82,46 @@ app.use('*', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 SafeStep OTP Backend running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`📍 Location service: http://localhost:${PORT}/api/location/health`);
 });
+
+// Graceful shutdown handling
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  
+  try {
+    // Import location service for cleanup
+    const LocationService = require('./services/locationService');
+    const locationService = new LocationService();
+    
+    // Cleanup location service
+    await locationService.cleanup();
+    console.log('✅ Location service cleanup completed');
+    
+    // Close server
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      process.exit(0);
+    });
+    
+    // Force close after 10 seconds
+    setTimeout(() => {
+      console.error('❌ Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+    
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = app;
