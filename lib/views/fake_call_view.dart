@@ -39,11 +39,11 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
 
   final List<Map<String, dynamic>> _templates = [
     {
-      'label': 'Emergency 119',
-      'callerName': 'Emergency Services',
-      'callerNumber': '119',
+      'label': 'Brother',
+      'callerName': 'Brother',
+      'callerNumber': '',
       'asset': 'assets/music.mp3',
-      'icon': Icons.emergency,
+      'icon': Icons.person,
       'color': Color(0xFFf5576c),
     },
     {
@@ -950,53 +950,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                   ),
           ),
         ),
-        const SizedBox(height: 12),
         
-        // Test Button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isCalling
-                ? null
-                : () async {
-                    setState(() => _isCalling = true);
-                    if (Platform.isAndroid) {
-                      await _ensurePhoneNumberPermission();
-                      await triggerFakeCallSystem(
-                        callerName: 'Test Caller',
-                        callerNumber: '5551234567',
-                        audioAsset: '',
-                      );
-                    } else {
-                      _showFakeCallDialog();
-                    }
-                    setState(() => _isCalling = false);
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bug_report, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Test Native Fake Call',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }

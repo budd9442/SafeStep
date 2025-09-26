@@ -14,6 +14,7 @@ class _CloseContactsViewState extends State<CloseContactsView> {
   bool _loading = false;
   String? _error;
   String? _userId;
+  bool _showEmergency = false;
 
   @override
   void initState() {
@@ -163,99 +164,178 @@ class _CloseContactsViewState extends State<CloseContactsView> {
 
   @override
   Widget build(BuildContext context) {
-    final content = Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18.0, horizontal: 18),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Your Close Contacts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF7B3FA0))),
-              ElevatedButton.icon(
-                onPressed: _showAddContactDialog,
-                icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text('Add', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7B3FA0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _userId == null 
-            ? const Center(child: CircularProgressIndicator())
-            : StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(_userId!)
-                    .collection('contacts')
-                    .orderBy('createdAt')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final docs = snapshot.data?.docs ?? [];
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.group, size: 80, color: Colors.grey.shade300),
-                          const SizedBox(height: 16),
-                          const Text('No contacts yet. Add your trusted contacts!', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                padding: const EdgeInsets.all(18),
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, i) {
-                  final data = docs[i].data() as Map<String, dynamic>;
-                  return Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 3,
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: const Color(0xFFEEE6FA),
-                        child: const Icon(Icons.person, color: Color(0xFF7B3FA0)),
-                      ),
-                      title: Text(data['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(data['phone'] ?? '', style: const TextStyle(color: Colors.black87)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteContact(docs[i].id),
-                        tooltip: 'Delete',
-                      ),
-                    ),
-                  );
-                },
-              );
-                },
-              ),
-        ),
-      ],
-    );
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF8F5FE8)),
-          onPressed: () => Navigator.of(context).maybePop(),
+        title: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    if (_showEmergency) setState(() { _showEmergency = false; });
+                  },
+                  child: Column(
+                    children: [
+                      Icon(Icons.group, size: 32, color: !_showEmergency ? Color(0xFF7B3FA0) : Colors.grey),
+                      Text('Friends', style: TextStyle(fontSize: 12, color: !_showEmergency ? Color(0xFF7B3FA0) : Colors.grey)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 32),
+                GestureDetector(
+                  onTap: () {
+                    if (!_showEmergency) setState(() { _showEmergency = true; });
+                  },
+                  child: Column(
+                    children: [
+                      Icon(Icons.local_hospital, size: 32, color: _showEmergency ? Color(0xFFD32F2F) : Colors.grey),
+                      Text('Emergency', style: TextStyle(fontSize: 12, color: _showEmergency ? Color(0xFFD32F2F) : Colors.grey)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+          ],
         ),
-        title: const Text('Close Contacts', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8F5FE8))),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
       ),
       backgroundColor: const Color(0xFFF8F6FC),
-      body: content,
+      body: _showEmergency
+          ? const EmergencyContactsView()
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18.0, horizontal: 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Your Trusted Contacts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF7B3FA0))),
+                      ElevatedButton.icon(
+                        onPressed: _showAddContactDialog,
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text('Add', style: TextStyle(color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7B3FA0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _userId == null 
+                      ? const Center(child: CircularProgressIndicator())
+                      : StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(_userId!)
+                              .collection('contacts')
+                              .orderBy('createdAt')
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+                            final docs = snapshot.data?.docs ?? [];
+                            if (docs.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.group, size: 80, color: Colors.grey.shade300),
+                                    const SizedBox(height: 16),
+                                    const Text('No contacts yet. Add your trusted contacts!', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                                  ],
+                                ),
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.all(18),
+                              itemCount: docs.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (context, i) {
+                                final data = docs[i].data() as Map<String, dynamic>;
+                                return Card(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  elevation: 3,
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: const Color(0xFFEEE6FA),
+                                      child: const Icon(Icons.person, color: Color(0xFF7B3FA0)),
+                                    ),
+                                    title: Text(data['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text(data['phone'] ?? '', style: const TextStyle(color: Colors.black87)),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () => _deleteContact(docs[i].id),
+                                      tooltip: 'Delete',
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class EmergencyContactsView extends StatelessWidget {
+  const EmergencyContactsView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final emergencyContacts = [
+      {'name': 'Police', 'phone': '100'},
+      {'name': 'Ambulance', 'phone': '101'},
+      {'name': 'Fire Brigade', 'phone': '102'},
+      {'name': 'Women Helpline', 'phone': '1091'},
+      {'name': 'Disaster Management', 'phone': '108'},
+    ];
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18.0, horizontal: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text('Emergency Contacts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFD32F2F))),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(18),
+            itemCount: emergencyContacts.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, i) {
+              final data = emergencyContacts[i];
+              return Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 3,
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFFDE0E0),
+                    child: const Icon(Icons.local_hospital, color: Color(0xFFD32F2F)),
+                  ),
+                  title: Text(data['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(data['phone'] ?? '', style: const TextStyle(color: Colors.black87)),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
