@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/local_session.dart';
 import 'views/auth/phone_auth_screen.dart';
+import 'views/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,8 +45,32 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.deepPurple,
       ),
       navigatorKey: SosNavigationService.navigatorKey,
-      home: AuthGate(),
+      home: SplashToAuthGate(),
     );
+  }
+}
+
+class SplashToAuthGate extends StatefulWidget {
+  @override
+  State<SplashToAuthGate> createState() => _SplashToAuthGateState();
+}
+
+class _SplashToAuthGateState extends State<SplashToAuthGate> {
+  bool _showSplash = true;
+
+  void _finishSplash() {
+    setState(() {
+      _showSplash = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showSplash) {
+      return SplashScreen(onFinish: _finishSplash);
+    } else {
+      return AuthGate();
+    }
   }
 }
 

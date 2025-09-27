@@ -407,7 +407,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                               controller: _otpController,
                               decoration: InputDecoration(
                                 labelText: 'Verification Code',
-                                hintText: '123456',
+                                hintText: 'XXXXXX',
+                                hintStyle: TextStyle(
+                                  color: Colors.grey.withOpacity(0.35),
+                                  fontSize: 18,
+                                ),
                                 prefixIcon: const Icon(Icons.security),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),

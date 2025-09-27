@@ -1,3 +1,4 @@
+import 'package:safestep/services/sos_blocker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:safestep/panic_screen.dart';
@@ -19,7 +20,10 @@ class SosNavigationService {
   static Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'openSosScreen':
-        _openSosScreenQueued();
+        // Block SOS if gesture recording is in progress
+        if (!SosBlocker.blockSos) {
+          _openSosScreenQueued();
+        }
         return null;
       default:
         throw PlatformException(

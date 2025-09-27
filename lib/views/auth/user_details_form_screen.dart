@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import '../../home_screen.dart';
+import '../../services/sos_blocker.dart';
 
 class UserDetailsFormScreen extends StatefulWidget {
   final String phoneNumber;
@@ -242,21 +243,98 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
   }
 
   Future<void> _recordGesture() async {
-    // Inform user
+  SosBlocker.blockSos = true;
+    // Step 1: Pre-instruction dialog
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        title: const Text("Record Shake Gesture"),
-        content: const Text("Shake your phone for 30 seconds."),
+        title: const Text("Get Ready to Record!"),
+        content: const Text(
+          "You will have 10 seconds to shake your phone as much as you can.\n\nPress Start when you are ready."
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Start")),
         ],
       ),
     );
 
-    // Use platform channel to record shake gesture
+    // Step 2: Show countdown modal and start platform call in parallel
+    int countdown = 10;
     double? maxDelta;
+    bool finished = false;
+    late StateSetter modalSetState;
+
+    await showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        Timer? timer;
+        timer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (countdown > 1) {
+            countdown--;
+            modalSetState(() {});
+          } else {
+            t.cancel();
+            if (!finished) {
+              finished = true;
+              Navigator.of(ctx).pop();
+            }
+          }
+        });
+        return StatefulBuilder(
+          builder: (context, setState) {
+            modalSetState = setState;
+            return Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Shake Now!",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Shake your phone as much as you can!",
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 80,
+                    height: 80,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          value: (10 - countdown) / 10,
+                          strokeWidth: 8,
+                          backgroundColor: Colors.grey.shade200,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                        ),
+                        Text(
+                          '$countdown',
+                          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text("Keep shaking until the timer ends!"),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    // Platform call (wait for countdown to finish first)
     try {
       final platform = MethodChannel('com.example.safestep/shake_gesture');
       final result = await platform.invokeMethod('recordShakeGesture');
@@ -277,6 +355,7 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
           ],
         ),
       );
+      SosBlocker.blockSos = false;
       return;
     } catch (e) {
       setState(() { _error = "Failed to record gesture: $e"; });
@@ -290,6 +369,7 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
           ],
         ),
       );
+      SosBlocker.blockSos = false;
       return;
     }
 
@@ -298,17 +378,22 @@ class _UserDetailsFormScreenState extends State<UserDetailsFormScreen> {
       _maxGestureValue = maxDelta;
     });
 
-    // Show recorded value
-    showDialog(
+    // Step 3: Show recorded value with success message instantly
+    await showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Gesture Recorded"),
-        content: Text("Maximum detected gesture value: ${maxDelta?.toStringAsFixed(2)}"),
+        title: const Text("Gesture Recorded!"),
+        content: Text(
+          maxDelta != null
+              ? "Great job! Your maximum detected gesture value is: ${maxDelta.toStringAsFixed(2)}\n\nThis will be used as your personal shake threshold."
+              : "Gesture recorded, but no value detected."
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
         ],
       ),
     );
+  SosBlocker.blockSos = false;
   }
 
   Future<void> _completeRegistration() async {

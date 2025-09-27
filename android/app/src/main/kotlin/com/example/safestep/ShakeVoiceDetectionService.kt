@@ -34,7 +34,7 @@ class ShakeDetectionService : Service(), SensorEventListener {
     // Allow multiple SOS triggers; rely on debounce timing instead of a sticky guard
 
     companion object {
-        // Static method to record shake gesture for 30 seconds and return max value
+    // Static method to record shake gesture for 10 seconds and return max value
         fun recordShakeGesture(context: Context, callback: (Float?, String?) -> Unit) {
             try {
                 val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
