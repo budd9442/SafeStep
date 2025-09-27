@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 
 class SharedUserLocationHistoryScreen extends StatefulWidget {
   final String userId;
@@ -28,13 +29,26 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
   List<Map<String, dynamic>> _locationHistory = [];
   bool _isLoading = true;
   String? _error;
-  List<Marker> _markers = [];
   Set<Polyline> _polylines = {};
+  Timer? _updateTimer;
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
     super.initState();
+    
     _loadLocationHistory();
+    
+    // Start real-time updates every 10 seconds - only update data, not UI
+    _updateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _updateLocationDataOnly();
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadLocationHistory() async {
@@ -51,9 +65,9 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
       // Get location history from backend API
       // First, we need to find active sessions for this user
       final sessionsResponse = await http.get(
-        Uri.parse('http://localhost:3000/api/location/sessions'),
+        Uri.parse('http://budd.systems:9442/api/location/sessions'),
         headers: {'Content-Type': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (sessionsResponse.statusCode == 200) {
         final sessionsData = json.decode(sessionsResponse.body);
@@ -75,9 +89,9 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
           
           // Get location history from API
           final historyResponse = await http.get(
-            Uri.parse('http://localhost:3000/api/location/history/$sessionId?limit=100'),
+            Uri.parse('http://budd.systems:9442/api/location/history/$sessionId?limit=100'),
             headers: {'Content-Type': 'application/json'},
-          );
+          ).timeout(const Duration(seconds: 10));
           
           if (historyResponse.statusCode == 200) {
             final historyData = json.decode(historyResponse.body);
@@ -87,10 +101,10 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
             
             for (var location in history) {
               allLocations.add({
-                'latitude': location['latitude'] as double,
-                'longitude': location['longitude'] as double,
+                'latitude': (location['latitude'] as num).toDouble(),
+                'longitude': (location['longitude'] as num).toDouble(),
                 'timestamp': location['timestamp'] ?? location['receivedAt']?.toString() ?? DateTime.now().toIso8601String(),
-                'accuracy': location['accuracy'] as double?,
+                'accuracy': location['accuracy'] != null ? (location['accuracy'] as num).toDouble() : null,
                 'sessionId': sessionId,
                 'source': 'api',
               });
@@ -121,10 +135,10 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
           
           if (lastKnownLocation != null) {
             allLocations.add({
-              'latitude': lastKnownLocation['latitude'],
-              'longitude': lastKnownLocation['longitude'],
+              'latitude': (lastKnownLocation['latitude'] as num).toDouble(),
+              'longitude': (lastKnownLocation['longitude'] as num).toDouble(),
               'timestamp': lastKnownLocation['timestamp'] ?? DateTime.now().toIso8601String(),
-              'accuracy': lastKnownLocation['accuracy'],
+              'accuracy': lastKnownLocation['accuracy'] != null ? (lastKnownLocation['accuracy'] as num).toDouble() : null,
               'sessionId': 'current',
               'source': 'firebase_fallback',
             });
@@ -154,53 +168,105 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
     }
   }
 
+  Future<void> _updateLocationDataOnly() async {
+    try {
+      print('🔄 [LOCATION HISTORY] Updating location data (silent update)');
+
+      List<Map<String, dynamic>> allLocations = [];
+
+      // Get location history from backend API
+      final sessionsResponse = await http.get(
+        Uri.parse('http://budd.systems:9442/api/location/sessions'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (sessionsResponse.statusCode == 200) {
+        final sessionsData = json.decode(sessionsResponse.body);
+        final sessions = sessionsData['data']['sessionsData'] as List;
+        
+        // Filter sessions for this user
+        final userSessions = sessions.where((session) => 
+          session['phoneNumber']?.contains(widget.userId) == true ||
+          session['clientId']?.contains(widget.userId) == true
+        ).toList();
+
+        for (var session in userSessions) {
+          final sessionId = session['sessionId'] as String;
+          
+          // Get location history from API
+          final historyResponse = await http.get(
+            Uri.parse('http://budd.systems:9442/api/location/history/$sessionId?limit=100'),
+            headers: {'Content-Type': 'application/json'},
+          ).timeout(const Duration(seconds: 10));
+          
+          if (historyResponse.statusCode == 200) {
+            final historyData = json.decode(historyResponse.body);
+            final history = historyData['data']['history'] as List;
+            
+            for (var location in history) {
+              allLocations.add({
+                'latitude': (location['latitude'] as num).toDouble(),
+                'longitude': (location['longitude'] as num).toDouble(),
+                'timestamp': location['timestamp'] ?? location['receivedAt']?.toString() ?? DateTime.now().toIso8601String(),
+                'accuracy': location['accuracy'] != null ? (location['accuracy'] as num).toDouble() : null,
+                'sessionId': sessionId,
+                'source': 'api',
+              });
+            }
+          }
+        }
+      }
+
+      // Sort by timestamp (oldest first for timeline)
+      allLocations.sort((a, b) => 
+        DateTime.parse(a['timestamp']).compareTo(DateTime.parse(b['timestamp'])));
+
+      // Only update if data has changed
+      if (allLocations.length != _locationHistory.length) {
+        print('📈 [LOCATION HISTORY] Data changed: ${_locationHistory.length} -> ${allLocations.length} points');
+        
+        setState(() {
+          _locationHistory = allLocations;
+        });
+        
+        _updateMapMarkers();
+      }
+    } catch (e) {
+      print('⚠️ [LOCATION HISTORY] Silent update failed: $e');
+      // Don't show error to user for silent updates
+    }
+  }
+
   void _updateMapMarkers() {
-    final markers = <Marker>{};
     final polylines = <Polyline>{};
 
     if (_locationHistory.isNotEmpty) {
-      // Add markers for each location point
-      for (int i = 0; i < _locationHistory.length; i++) {
-        final location = _locationHistory[i];
-        final timestamp = DateTime.parse(location['timestamp']);
-        
-        markers.add(
-          Marker(
-            markerId: MarkerId('history_$i'),
-            position: LatLng(location['latitude'], location['longitude']),
-            infoWindow: InfoWindow(
-              title: widget.userName,
-              snippet: DateFormat('MMM dd, HH:mm').format(timestamp),
-            ),
-            icon: i == _locationHistory.length - 1 
-              ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue)
-              : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          ),
-        );
-      }
-
-      // Create polyline connecting all points
+      // Create polyline connecting all points to show the path
       if (_locationHistory.length > 1) {
         final points = _locationHistory.map((location) => 
           LatLng(location['latitude'], location['longitude'])).toList();
         
+        // Main path polyline
         polylines.add(
           Polyline(
-            polylineId: const PolylineId('route'),
+            polylineId: const PolylineId('location_path'),
             points: points,
             color: const Color(0xFF8F5FE8),
-            width: 3,
-            patterns: [PatternItem.dot, PatternItem.gap(10)],
+            width: 4,
+            patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+            jointType: JointType.round,
+            endCap: Cap.roundCap,
+            startCap: Cap.roundCap,
           ),
         );
       }
     }
 
     setState(() {
-      _markers = markers.toList();
       _polylines = polylines;
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -288,23 +354,50 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
               ),
               child: Row(
                 children: [
-                  // Profile image
+                  // Profile image with error handling
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: const Color(0xFF8F5FE8),
-                    backgroundImage: widget.profileImageUrl != null
-                        ? NetworkImage(widget.profileImageUrl!)
-                        : null,
-                    child: widget.profileImageUrl == null
-                        ? Text(
+                    child: widget.profileImageUrl != null && widget.profileImageUrl!.isNotEmpty
+                        ? ClipOval(
+                            child: Image.network(
+                              '${widget.profileImageUrl!}?t=${DateTime.now().millisecondsSinceEpoch}',
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Text(
+                                  widget.userName.isNotEmpty ? widget.userName[0].toUpperCase() : 'U',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : Text(
                             widget.userName.isNotEmpty ? widget.userName[0].toUpperCase() : 'U',
                             style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
-                          )
-                        : null,
+                          ),
                   ),
                   const SizedBox(width: 12),
                   // User info
@@ -321,7 +414,7 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
                           ),
                         ),
                         Text(
-                          '${_locationHistory.length} location points',
+                          '${_locationHistory.length} points • Live path',
                           style: GoogleFonts.poppins(
                             color: const Color(0xFF718096),
                             fontSize: 12,
@@ -424,15 +517,21 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: GoogleMap(
+                onMapCreated: (GoogleMapController controller) {
+                  _mapController = controller;
+                },
                 initialCameraPosition: CameraPosition(
                   target: widget.currentLocation,
-                  zoom: 15,
+                  zoom: 16.0,
                 ),
-                markers: _markers.toSet(),
                 polylines: _polylines,
                 myLocationEnabled: false,
                 myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
+                zoomControlsEnabled: true,
+                scrollGesturesEnabled: true,
+                zoomGesturesEnabled: true,
+                tiltGesturesEnabled: true,
+                rotateGesturesEnabled: true,
               ),
             ),
           ),
@@ -475,7 +574,7 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Location Timeline',
+                        'Location Path & Timeline',
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -483,17 +582,26 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
                         ),
                       ),
                       const Spacer(),
-                      // Debug button
+                      // Simple zoom button
                       IconButton(
                         icon: Icon(
-                          Icons.bug_report,
+                          Icons.zoom_out_map,
                           color: const Color(0xFF8F5FE8),
                           size: 20,
                         ),
                         onPressed: () {
-                          _loadLocationHistory();
+                          if (_mapController != null) {
+                            _mapController!.animateCamera(
+                              CameraUpdate.newCameraPosition(
+                                CameraPosition(
+                                  target: widget.currentLocation,
+                                  zoom: 16.0,
+                                ),
+                              ),
+                            );
+                          }
                         },
-                        tooltip: 'Refresh location history',
+                        tooltip: 'Zoom to location',
                       ),
                     ],
                   ),

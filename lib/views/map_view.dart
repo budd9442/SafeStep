@@ -72,9 +72,11 @@ class MapViewState extends State<MapView> {
     // Load the profile image (from URL, file, or asset)
     Uint8List profileBytes;
     if (profilePicPath.startsWith('http')) {
-      // Network URL - download the image
+      // Network URL - download the image with cache-busting
       try {
-        final response = await http.get(Uri.parse(profilePicPath));
+        // Add cache-busting parameter to prevent caching
+        final cacheBustedUrl = '$profilePicPath?t=${DateTime.now().millisecondsSinceEpoch}';
+        final response = await http.get(Uri.parse(cacheBustedUrl));
         if (response.statusCode == 200) {
           profileBytes = response.bodyBytes;
         } else {
@@ -127,7 +129,7 @@ class MapViewState extends State<MapView> {
     });
   }
 
-  Future<String?> _fetchAndCacheProfilePic() async {
+  Future<String?> _fetchProfilePicWithoutCache() async {
     try {
       // Use local session user ID
       final localUserId = await LocalSession.getCurrentUserId();
@@ -138,17 +140,17 @@ class MapViewState extends State<MapView> {
 
       if (profilePicUrl != null && profilePicUrl.isNotEmpty) {
         if (profilePicUrl.startsWith('http')) {
-          // It's already a URL, return it with cache-busting
+          // It's already a URL, return it with cache-busting to prevent caching
           return '$profilePicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
         } else {
-          // It's a Firebase Storage path, get the download URL
+          // It's a Firebase Storage path, get the download URL with cache-busting
           final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child(profilePicUrl);
           final url = await ref.getDownloadURL();
           return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
         }
       }
 
-      // Fallback to Firebase Storage with user ID
+      // Fallback to Firebase Storage with user ID - no caching
       final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/$localUserId.jpg');
       final url = await ref.getDownloadURL();
       return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
@@ -159,7 +161,7 @@ class MapViewState extends State<MapView> {
   }
 
   Future<void> _loadProfilePointerMarkerWithFallback() async {
-    final profilePicPath = await _fetchAndCacheProfilePic();
+    final profilePicPath = await _fetchProfilePicWithoutCache();
     if (profilePicPath != null) {
       final marker = await createProfilePointerMarker(profilePicPath);
       setState(() {
@@ -324,7 +326,9 @@ class MapViewState extends State<MapView> {
     
     if (profileImageUrl != null && profileImageUrl.isNotEmpty && profileImageUrl.startsWith('http')) {
       try {
-        final response = await http.get(Uri.parse(profileImageUrl));
+        // Add cache-busting parameter to prevent caching
+        final cacheBustedUrl = '$profileImageUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+        final response = await http.get(Uri.parse(cacheBustedUrl));
         if (response.statusCode == 200) {
           profileBytes = response.bodyBytes;
           final profileCodec = await ui.instantiateImageCodec(profileBytes, targetWidth: 150, targetHeight: 150);

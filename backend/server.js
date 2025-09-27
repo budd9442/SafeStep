@@ -7,6 +7,7 @@ require('dotenv').config();
 const otpRoutes = require('./routes/otp');
 const userRoutes = require('./routes/user');
 const locationRoutes = require('./routes/location');
+const emergencyRoutes = require('./routes/emergency');
 const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
@@ -55,6 +56,7 @@ app.get('/health', (req, res) => {
 app.use('/api/otp', otpRateLimit, otpRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/location', locationRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
