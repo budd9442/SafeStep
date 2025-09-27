@@ -6,8 +6,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'safe_chat_ui.dart';
+import '../services/local_session.dart';
+import '../services/agent_data_service.dart';
 import 'agent_prompts.dart';
 
 
@@ -29,13 +29,21 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
   String _botNickname = 'Safestep Assistant';
 
   // Settings state
-  String _mode = 'safe'; // 'safe' or 'yonali'
   String _defaultLanguage = 'auto'; // 'auto', 'sinhala', 'english', 'singlish'
   bool _showRiskAnalysis = true;
 
   // Firestore integration
   String? _chatId;
-  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  String? _uid;
+  String? _aiName;
+  String? _aiPersonality;
+  String? _aiPersonalityText;
+  String? _aiVoice;
+  String? _aiResponseStyle;
+  bool _aiLocationAware = true;
+  bool _aiSensorAware = true;
+  bool _aiContextAware = true;
+  String? _aiProfileImageUrl;
 
   // Animation controllers
   late AnimationController _fadeController;
@@ -47,6 +55,8 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
   void initState() {
     super.initState();
     _initAnimations();
+    _initUserId();
+    _startAgentDataCollection();
     
     if (widget.internal) {
       // _loadChatSessions(); // Removed unused chat session loading
@@ -97,18 +107,70 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
     _slideController.forward();
   }
 
+  Future<void> _initUserId() async {
+    _uid = await LocalSession.getCurrentUserId();
+    if (_uid != null && mounted) {
+      await _loadAIAssistantSettings();
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadAIAssistantSettings() async {
+    if (_uid == null) return;
+    
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid!)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        final aiSettings = data['aiAssistantSettings'] as Map<String, dynamic>? ?? {};
+        
+        setState(() {
+          _aiName = aiSettings['name'] ?? 'SafeStep Assistant';
+          _aiPersonality = aiSettings['personality'] ?? 'supportive';
+          _aiPersonalityText = aiSettings['personalityText'] ?? '';
+          _aiVoice = aiSettings['voice'] ?? 'calm';
+          _aiResponseStyle = aiSettings['responseStyle'] ?? 'professional';
+          _aiLocationAware = aiSettings['locationAware'] ?? true;
+          _aiSensorAware = aiSettings['sensorAware'] ?? true;
+          _aiContextAware = aiSettings['contextAware'] ?? true;
+          _aiProfileImageUrl = aiSettings['profileImageUrl'];
+        });
+        
+        print('✅ [SAFE CHAT] AI Assistant settings loaded: ${_aiName}');
+      }
+    } catch (e) {
+      print('❌ [SAFE CHAT] Error loading AI assistant settings: $e');
+    }
+  }
+
+  Future<void> _startAgentDataCollection() async {
+    try {
+      await AgentDataService.startDataCollection();
+      print('✅ [SAFE CHAT] Agent data collection started');
+    } catch (e) {
+      print('❌ [SAFE CHAT] Failed to start agent data collection: $e');
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
     _fadeController.dispose();
     _slideController.dispose();
+    AgentDataService.stopDataCollection();
     super.dispose();
   }
 
   Future<void> _loadChat(String chatId) async {
+    if (_uid == null || _uid!.isEmpty) return;
+    
     final snap = await FirebaseFirestore.instance
-        .collection('users').doc(_uid).collection('chats').doc(chatId)
+        .collection('users').doc(_uid!).collection('chats').doc(chatId)
         .collection('messages').orderBy('timestamp').get();
     setState(() {
       _chatId = chatId;
@@ -120,9 +182,9 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
   }
 
   Future<void> _saveMessage(Map<String, dynamic> msg) async {
-    if (_chatId == null) return;
+    if (_chatId == null || _uid == null || _uid!.isEmpty) return;
     await FirebaseFirestore.instance
-        .collection('users').doc(_uid).collection('chats').doc(_chatId)
+        .collection('users').doc(_uid!).collection('chats').doc(_chatId)
         .collection('messages').add({
       ...msg,
       'timestamp': (msg['timestamp'] is DateTime)
@@ -133,10 +195,12 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
 
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+    if (_uid == null || _uid!.isEmpty) return;
+    
     if (_chatId == null) {
       // Create chat session on first message
       final doc = await FirebaseFirestore.instance
-          .collection('users').doc(_uid).collection('chats')
+          .collection('users').doc(_uid!).collection('chats')
           .add({'createdAt': FieldValue.serverTimestamp()});
       setState(() {
         _chatId = doc.id;
@@ -295,8 +359,7 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
     });
   }
 
-  String getAgentPrompt(String mode, String language) {
-    String modePrompt = mode == 'yonali' ? AgentPrompts.modeYonali : AgentPrompts.modeSafe;
+  String getAgentPrompt(String language) {
     String langPrompt = '';
     
     switch (language) {
@@ -316,10 +379,201 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
         langPrompt = AgentPrompts.langAuto;
     }
     
-    return modePrompt + '\n\n' + langPrompt;
+    return AgentPrompts.modeSafe + '\n\n' + langPrompt;
   }
 
   Future<String> fetchGeminiResponse(String prompt) async {
+    return await _fetchGeminiResponseWithRetry(prompt, maxRetries: 3);
+  }
+
+  Future<String> _fetchGeminiResponseWithRetry(String prompt, {int maxRetries = 3}) async {
+    int attempt = 0;
+    Exception? lastException;
+    
+    while (attempt < maxRetries) {
+      attempt++;
+      print('🔄 [AI AGENT] Attempt $attempt/$maxRetries');
+      
+      try {
+        final result = await _makeGeminiRequest(prompt);
+        if (attempt > 1) {
+          print('✅ [AI AGENT] Request succeeded on attempt $attempt');
+        }
+        return result;
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        print('❌ [AI AGENT] Attempt $attempt failed: $e');
+        
+        if (attempt < maxRetries) {
+          // Wait before retrying (exponential backoff)
+          final delay = Duration(seconds: attempt * 2);
+          print('⏳ [AI AGENT] Waiting ${delay.inSeconds}s before retry...');
+          await Future.delayed(delay);
+        }
+      }
+    }
+    
+    // All retries failed, return error response
+    print('❌ [AI AGENT] All $maxRetries attempts failed. Giving up.');
+    return jsonEncode({
+      'message': 'AI service is currently unavailable after multiple attempts. Please try again later.',
+      'risk_analysis': 'Unable to analyze risk due to persistent API errors.',
+      'error_code': 'MAX_RETRIES_EXCEEDED',
+      'help': 'The AI service is experiencing technical difficulties. Please try again in a few minutes.',
+      'attempts_made': maxRetries,
+      'last_error': lastException?.toString() ?? 'Unknown error'
+    });
+  }
+
+  String _formatChatHistoryCompact() {
+    if (_messages.isEmpty) return 'No previous messages';
+    
+    // Get last 5 messages (excluding the current one being sent)
+    final recentMessages = _messages.take(5).toList();
+    final List<String> formattedMessages = [];
+    
+    for (final message in recentMessages) {
+      final role = message['role'] as String;
+      final content = message['content'] as String;
+      final timestamp = message['timestamp'] as DateTime?;
+      
+      // Format timestamp
+      String timeStr = '';
+      if (timestamp != null) {
+        timeStr = ' (${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')})';
+      }
+      
+      // Truncate long messages
+      String truncatedContent = content;
+      if (content.length > 100) {
+        truncatedContent = '${content.substring(0, 97)}...';
+      }
+      
+      // Format role
+      String roleLabel = role == 'user' ? 'User' : 'AI';
+      
+      formattedMessages.add('$roleLabel$timeStr: $truncatedContent');
+    }
+    
+    return formattedMessages.join('\n');
+  }
+
+  String _extractCurrentConcern() {
+    if (_messages.isEmpty) return 'None identified';
+    
+    // Look for recent user messages that might indicate concerns
+    final userMessages = _messages.where((msg) => msg['role'] == 'user').toList();
+    if (userMessages.isEmpty) return 'None identified';
+    
+    final lastUserMessage = userMessages.last['content'] as String;
+    
+    // Simple keyword detection for safety concerns
+    final safetyKeywords = [
+      'unsafe', 'scared', 'afraid', 'worried', 'danger', 'threat', 'help',
+      'emergency', 'panic', 'fear', 'anxious', 'nervous', 'concerned',
+      'followed', 'stalked', 'harassed', 'attacked', 'hurt', 'injured'
+    ];
+    
+    final lowerMessage = lastUserMessage.toLowerCase();
+    for (final keyword in safetyKeywords) {
+      if (lowerMessage.contains(keyword)) {
+        return 'Safety concern detected: $keyword';
+      }
+    }
+    
+    return 'General inquiry';
+  }
+
+  String _analyzeConversationFlow() {
+    if (_messages.length < 2) return 'Initial conversation';
+    
+    // Analyze the pattern of recent messages
+    final recentMessages = _messages.take(5).toList();
+    final userMessages = recentMessages.where((msg) => msg['role'] == 'user').length;
+    final aiMessages = recentMessages.where((msg) => msg['role'] == 'ai').length;
+    
+    if (userMessages > aiMessages) {
+      return 'User seeking help';
+    } else if (aiMessages > userMessages) {
+      return 'AI providing guidance';
+    } else {
+      return 'Balanced conversation';
+    }
+  }
+
+  String _detectOngoingSafetySituation() {
+    if (_messages.isEmpty) return 'None';
+    
+    // Look for patterns that suggest an ongoing safety situation
+    final allMessages = _messages.map((msg) => msg['content'] as String).join(' ').toLowerCase();
+    
+    // Check for emergency keywords
+    final emergencyKeywords = ['emergency', 'urgent', 'immediate', 'now', 'help me'];
+    for (final keyword in emergencyKeywords) {
+      if (allMessages.contains(keyword)) {
+        return 'Emergency situation detected';
+      }
+    }
+    
+    // Check for ongoing threats
+    final threatKeywords = ['followed', 'stalked', 'harassed', 'threatened', 'attacked'];
+    for (final keyword in threatKeywords) {
+      if (allMessages.contains(keyword)) {
+        return 'Ongoing threat situation';
+      }
+    }
+    
+    // Check for repeated safety concerns
+    final safetyConcerns = ['unsafe', 'scared', 'afraid', 'worried', 'danger'];
+    int concernCount = 0;
+    for (final keyword in safetyConcerns) {
+      if (allMessages.contains(keyword)) {
+        concernCount++;
+      }
+    }
+    
+    if (concernCount >= 2) {
+      return 'Multiple safety concerns raised';
+    }
+    
+    return 'None detected';
+  }
+
+  String _formatSafePlacesCompact(List<dynamic> safePlaces) {
+    if (safePlaces.isEmpty) return 'None nearby';
+    
+    final List<String> places = [];
+    for (final place in safePlaces.take(3)) { // Only top 3
+      final type = place['type'] == 'police_station' ? 'Police' : 'Hospital';
+      final name = place['name'] ?? 'Unknown';
+      final distance = place['distance_km']?.toStringAsFixed(1) ?? '?';
+      places.add('$type: $name (${distance}km)');
+    }
+    return places.join(', ');
+  }
+
+  String _formatSensorStatusCompact(Map<String, dynamic> sensorData) {
+    if (sensorData.isEmpty) return 'No data';
+    
+    final accel = sensorData['accelerometer']?['analysis'];
+    if (accel == null) return 'No analysis';
+    
+    final movement = accel['movement_pattern'] ?? 'unknown';
+    final avgMag = accel['average_magnitude']?.toStringAsFixed(1) ?? '?';
+    
+    String status = movement;
+    if (accel['potential_indicators']?['possible_fall'] == true) {
+      status += ' (possible fall)';
+    } else if (accel['potential_indicators']?['possible_running'] == true) {
+      status += ' (running)';
+    } else if (accel['potential_indicators']?['possible_stationary'] == true) {
+      status += ' (stationary)';
+    }
+    
+    return '$status (avg: ${avgMag})';
+  }
+
+  Future<String> _makeGeminiRequest(String prompt) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
     
     // Enhanced API key validation with better error messages
@@ -359,33 +613,56 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
       });
     }
 
-    // Gather device context: location, time, etc.
-    String? locationString;
+    // Gather comprehensive device context using AgentDataService
+    Map<String, dynamic> comprehensiveData;
     try {
-      // Use Geolocator to get current position if available
-      // (Assumes Geolocator is available in your project)
-      // If not, you can inject location from parent widget
-      // or pass as a parameter.
-      // For now, just use a placeholder:
-      locationString = 'Unavailable';
-    } catch (_) {
-      locationString = 'Unavailable';
+      comprehensiveData = await AgentDataService.getComprehensiveData();
+      print('✅ [AI AGENT] Comprehensive data collected successfully');
+    } catch (e) {
+      print('❌ [AI AGENT] Failed to collect comprehensive data: $e');
+      comprehensiveData = {
+        'error': 'Failed to collect comprehensive data: ${e.toString()}',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
     }
-
-    final now = DateTime.now();
-    final timeString = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-    final dateString = '${now.day}/${now.month}/${now.year}';
 
     final contextString = '''
 Device Context:
-- Time: $timeString
-- Date: $dateString
-- Location: $locationString
+- Time: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}
 - Language: $_defaultLanguage
-- Mode: $_mode
+
+Data Available:
+- Location: ${comprehensiveData['location']?['latitude'] != null ? 'Available' : 'Unavailable'}
+- Safe Places: ${(comprehensiveData['nearby_safe_places'] as List?)?.length ?? 0} nearby
+- Sensor Data: ${comprehensiveData['sensor_data']?['accelerometer']?['raw_data_count'] ?? 0} readings
+- User: ${comprehensiveData['user_context']?['name'] ?? 'Unknown'}
 ''';
 
-    final fullPrompt = 'SYSTEM: You are a JSON-only AI. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.\n\n' + contextString + '\n\nUser Message: ' + prompt + '\n\nREMEMBER: You MUST respond in JSON format only. NEVER send plain text.';
+    final fullPrompt = '''
+You are ${_aiName ?? 'SafeStep Assistant'}, a JSON-only AI safety agent. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.
+
+PERSONALITY: ${_aiPersonality ?? 'supportive'}, ${_aiVoice ?? 'calm'} voice, ${_aiResponseStyle ?? 'professional'} style
+${_aiPersonalityText != null && _aiPersonalityText!.isNotEmpty ? 'CUSTOM: ${_aiPersonalityText}' : ''}
+
+${contextString}
+
+LOCATION: ${comprehensiveData['location']?['latitude'] != null ? '${comprehensiveData['location']['latitude']}, ${comprehensiveData['location']['longitude']}' : 'Unavailable'}
+SAFE PLACES: ${_formatSafePlacesCompact(comprehensiveData['nearby_safe_places'] ?? [])}
+SENSORS: ${_formatSensorStatusCompact(comprehensiveData['sensor_data'] ?? {})}
+TIME: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')} ${DateTime.now().hour >= 22 || DateTime.now().hour <= 6 ? '(Night)' : '(Day)'}
+USER: ${comprehensiveData['user_context']?['name'] ?? 'Unknown'} - ${comprehensiveData['user_context']?['is_sharing_location'] == true ? 'Sharing location' : 'Not sharing'}
+
+CHAT HISTORY: ${_formatChatHistoryCompact()}
+CONTEXT: ${_extractCurrentConcern()} | ${_analyzeConversationFlow()} | ${_detectOngoingSafetySituation()}
+
+AWARENESS: Location:${_aiLocationAware ? 'Yes' : 'No'} Sensor:${_aiSensorAware ? 'Yes' : 'No'} Context:${_aiContextAware ? 'Yes' : 'No'}
+
+Provide safety assistance based on your personality profile and available data.
+
+User Message: $prompt
+
+REMEMBER: JSON format only. NEVER send plain text.
+''';
 
     try {
       final response = await http.post(
@@ -394,7 +671,7 @@ Device Context:
         body: jsonEncode({
           'contents': [{
             'parts': [{
-              'text': 'SYSTEM: You are a JSON-only AI. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.\n\n' + getAgentPrompt(_mode, _defaultLanguage) + '\n\n' + fullPrompt
+              'text': 'SYSTEM: You are a JSON-only AI. You MUST respond in valid JSON format. NEVER send plain text, NEVER use markdown, NEVER show code blocks.\n\n' + getAgentPrompt(_defaultLanguage) + '\n\n' + fullPrompt
             }]
           }]
         }),
@@ -509,7 +786,6 @@ Device Context:
 
   Future<void> _showSettingsDialog() async {
     final controller = TextEditingController(text: _botNickname);
-    String tempMode = _mode;
     String tempLang = _defaultLanguage;
     bool tempShowRisk = _showRiskAnalysis;
 
@@ -527,19 +803,6 @@ Device Context:
                 labelText: 'Assistant Name',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: tempMode,
-              decoration: InputDecoration(
-                labelText: 'Mode',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'safe', child: Text('Safe Mode')),
-                DropdownMenuItem(value: 'yonali', child: Text('Yonali Mode')),
-              ],
-              onChanged: (v) => setState(() => tempMode = v!),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
@@ -580,7 +843,6 @@ Device Context:
           ElevatedButton(
             onPressed: () => Navigator.pop(context, {
               'nickname': controller.text.trim(),
-              'mode': tempMode,
               'lang': tempLang,
               'showRisk': tempShowRisk,
             }),
@@ -591,12 +853,10 @@ Device Context:
     );
     if (result != null) {
       final newName = result['nickname'] as String?;
-      final newMode = result['mode'] as String?;
       final newLang = result['lang'] as String?;
       final newShowRisk = result['showRisk'] as bool?;
       setState(() {
         if (newName != null && newName.isNotEmpty && newName != _botNickname) _botNickname = newName;
-        if (newMode != null && newMode != _mode) _mode = newMode;
         if (newLang != null && newLang != _defaultLanguage) _defaultLanguage = newLang;
         if (newShowRisk != null && newShowRisk != _showRiskAnalysis) _showRiskAnalysis = newShowRisk;
       });
@@ -901,11 +1161,27 @@ Device Context:
                   color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.shield_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                child: _aiProfileImageUrl != null
+                    ? ClipOval(
+                        child: Image.network(
+                          _aiProfileImageUrl!,
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.shield_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            );
+                          },
+                        ),
+                      )
+                    : const Icon(
+                        Icons.shield_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
               ),
               const SizedBox(width: 12),
               
@@ -915,7 +1191,7 @@ Device Context:
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _botNickname,
+                      _aiName ?? _botNickname,
                       style: GoogleFonts.lato(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -1322,10 +1598,18 @@ Device Context:
   }
 
   Widget _buildChatHistory() {
+    if (_uid == null || _uid!.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8F5FE8)),
+        ),
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .doc(_uid)
+          .doc(_uid!)
           .collection('chats')
           .orderBy('createdAt', descending: true)
           .snapshots(),

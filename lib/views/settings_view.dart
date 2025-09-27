@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:safestep/views/map_view.dart';
 import 'package:safestep/services/local_session.dart';
+import 'ai_personalization_screen.dart';
 import 'package:safestep/views/profile_settings_view.dart';
 
 class SettingsView extends StatelessWidget {
@@ -37,6 +38,10 @@ class SettingsView extends StatelessWidget {
           _SettingsTile(
             icon: Icons.person,
             label: 'Profile settings',
+          ),
+          _SettingsTile(
+            icon: Icons.smart_toy,
+            label: 'AI Assistant Settings',
           ),
         ],
       ),
@@ -82,6 +87,10 @@ class _SettingsTile extends StatelessWidget {
           if (label == 'Profile settings') {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const _ProfileSettingsRouteProxy()),
+            );
+          } else if (label == 'AI Assistant Settings') {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AIPersonalizationScreen()),
             );
           }
         },

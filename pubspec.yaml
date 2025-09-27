@@ -64,6 +64,8 @@ dependencies:
   path_provider: ^2.1.5
   http: ^1.1.0
   shared_preferences: ^2.2.3
+  sqflite: ^2.3.0
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

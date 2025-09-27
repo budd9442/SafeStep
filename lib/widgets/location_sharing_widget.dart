@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart';
 import '../services/native_background_location_service.dart';
 
 // Updated share location sheet content with backend integration
+class _ShareLocationSheetContent extends StatefulWidget {
+  const _ShareLocationSheetContent();
+
+  @override
+  State<_ShareLocationSheetContent> createState() => _ShareLocationSheetContentState();
+}
+
 class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> {
   Set<String> _selectedContactIds = {};
   String _search = '';
@@ -220,14 +226,115 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
       _sessionId = backendResponse.sessionId;
       print('✅ [SHARE LOCATION] Backend session started: $_sessionId');
       
-      // Step 5: Update Firebase with sharing status and session info
+      // Step 6: Convert contact IDs to user IDs and send notifications
+      final fromName = (userData['name'] ?? 'Someone').toString();
+      final fromId = userDoc.id;
+      final contactsCol = FirebaseFirestore.instance.collection('users');
+      final List<String> actualUserIds = [];
+      
+      // Get contact details to find their phone numbers
+      for (final contactId in _selectedContactIds) {
+        try {
+          final contactDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userDoc.id)
+              .collection('contacts')
+              .doc(contactId)
+              .get();
+          
+          if (contactDoc.exists) {
+            final contactData = contactDoc.data()!;
+            final contactPhone = contactData['phone'] as String?;
+            
+            if (contactPhone != null) {
+              // Format phone number to match user format
+              String formattedPhone;
+              if (contactPhone.startsWith('tel:')) {
+                formattedPhone = contactPhone;
+              } else if (contactPhone.startsWith('0')) {
+                // Convert Sri Lankan format (0714555151) to international format (tel:94714555151)
+                formattedPhone = 'tel:94${contactPhone.substring(1)}';
+              } else if (contactPhone.startsWith('94')) {
+                // Already has country code, just add tel: prefix
+                formattedPhone = 'tel:$contactPhone';
+              } else {
+                // Assume it's a local number, add country code
+                formattedPhone = 'tel:94$contactPhone';
+              }
+              
+              print('🔍 [SHARE LOCATION] Looking up user with formatted phone: $formattedPhone');
+              
+              // Find user by phone number
+              final userQuery = await FirebaseFirestore.instance
+                  .collection('users')
+                  .where('phoneNumber', isEqualTo: formattedPhone)
+                  .limit(1)
+                  .get();
+              
+              if (userQuery.docs.isNotEmpty) {
+                final targetUserId = userQuery.docs.first.id;
+                actualUserIds.add(targetUserId);
+                
+                // Send notification to the actual user
+                await contactsCol
+                    .doc(targetUserId)
+                    .collection('inbox')
+                    .add({
+                  'type': 'share_location',
+                  'fromUserId': fromId,
+                  'fromName': fromName,
+                  'sessionId': _sessionId,
+                  'createdAt': FieldValue.serverTimestamp(),
+                  'read': false,
+                });
+                print('📨 [SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
+              } else {
+                // Try finding by document ID (user ID might be the phone number without tel: prefix)
+                final phoneWithoutTel = formattedPhone.replaceAll('tel:', '');
+                print('🔍 [SHARE LOCATION] Trying to find user by document ID: $phoneWithoutTel');
+                
+                final userDoc = await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(phoneWithoutTel)
+                    .get();
+                
+                if (userDoc.exists) {
+                  print('✅ [SHARE LOCATION] Found user by document ID: $phoneWithoutTel');
+                  final targetUserId = userDoc.id;
+                  actualUserIds.add(targetUserId);
+                  
+                  // Send notification to the actual user
+                  await contactsCol
+                      .doc(targetUserId)
+                      .collection('inbox')
+                      .add({
+                    'type': 'share_location',
+                    'fromUserId': fromId,
+                    'fromName': fromName,
+                    'sessionId': _sessionId,
+                    'createdAt': FieldValue.serverTimestamp(),
+                    'read': false,
+                  });
+                  print('📨 [SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
+                } else {
+                  print('⚠️ [SHARE LOCATION] No user found for phone: $contactPhone');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          print('❌ [SHARE LOCATION] Failed to process contact $contactId: $e');
+        }
+      }
+      
+      // Update Firebase with actual user IDs instead of contact IDs
       final durationMap = {0: 'always', 1: '1h', 2: '8h'};
       await userDoc.reference.set({
-        'shareLocationContacts': _selectedContactIds.toList(),
+        'shareLocationContacts': actualUserIds, // Store actual user IDs
         'shareLocationDuration': durationMap[_selectedDuration],
         'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
         'sharingLocation': true,
-        'locationSessionId': _sessionId, // Store backend session ID
+        'locationSessionId': _sessionId,
         'locationClientId': clientId,
         'lastKnownLocation': {
           'latitude': locationData.latitude,
@@ -236,41 +343,26 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
           'timestamp': locationData.timestamp,
         },
       }, SetOptions(merge: true));
-
+      
+      print('✅ [SHARE LOCATION] Firebase updated with shareLocationContacts: $actualUserIds');
+      
       print('✅ [SHARE LOCATION] Firebase updated with sharing status');
-      
-      // Step 6: Send inbox notifications to selected contacts
-      final fromName = (userData['name'] ?? 'Someone').toString();
-      final fromId = userDoc.id;
-      final contactsCol = FirebaseFirestore.instance.collection('users');
-      
-      for (final contactId in _selectedContactIds) {
-        try {
-          await contactsCol
-              .doc(contactId)
-              .collection('inbox')
-              .add({
-            'type': 'share_location',
-            'fromUserId': fromId,
-            'fromName': fromName,
-            'sessionId': _sessionId, // Include session ID in notification
-            'createdAt': FieldValue.serverTimestamp(),
-            'read': false,
-          });
-          print('📨 [SHARE LOCATION] Notification sent to contact: $contactId');
-        } catch (e) {
-          print('❌ [SHARE LOCATION] Failed to send notification to $contactId: $e');
-        }
-      }
       
       print('✅ [SHARE LOCATION] Location sharing started successfully');
       
-      // Start native background location tracking
+      // Step 7: Start native background location tracking AFTER Firebase update
+      // Add a small delay to ensure Firebase update is propagated
+      await Future.delayed(const Duration(milliseconds: 500));
+      
       try {
-        await NativeBackgroundLocationService.startTracking();
-        print('✅ [SHARE LOCATION] Native background location tracking started');
+        final trackingStarted = await NativeBackgroundLocationService.startTracking(sessionId: _sessionId);
+        if (trackingStarted) {
+          print('✅ [SHARE LOCATION] Native background location tracking started');
+        } else {
+          print('⚠️ [SHARE LOCATION] Background tracking failed to start - user may not be sharing');
+        }
       } catch (e) {
-        print('⚠️ [SHARE LOCATION] Failed to start native background tracking: $e');
+        print('❌ [SHARE LOCATION] Failed to start native background tracking: $e');
       }
       
       // Show success message
@@ -279,6 +371,13 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
           SnackBar(
             content: Text('Location sharing started with ${_selectedContactIds.length} contact(s)'),
             backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'Test Updates',
+              textColor: Colors.white,
+              onPressed: () {
+                NativeBackgroundLocationService.forceMultipleLocationUpdates();
+              },
+            ),
           ),
         );
       }
@@ -300,147 +399,5 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
       Navigator.pop(context);
       setState(() => _sharingLocation = false);
     }
-  }
-}
-
-// Updated stop sharing functionality with backend integration
-class _ActiveShareLocationPanelState extends State<ActiveShareLocationPanel> {
-  bool _stopping = false;
-
-  Future<void> _stopSharing() async {
-    setState(() => _stopping = true);
-    
-    try {
-      print('🛑 [STOP SHARING] Starting stop sharing process');
-      
-      // Find the authenticated user
-      final usersQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('isAuthenticated', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (usersQuery.docs.isNotEmpty) {
-        final userDoc = usersQuery.docs.first;
-        final userData = userDoc.data();
-        final sessionId = userData['locationSessionId'];
-        
-        // Stop backend session if it exists
-        if (sessionId != null) {
-          print('🛑 [STOP SHARING] Stopping backend session: $sessionId');
-          final backendResponse = await LocationService.stopLocationSharing(
-            sessionId: sessionId,
-          );
-          
-          if (backendResponse.success) {
-            print('✅ [STOP SHARING] Backend session stopped successfully');
-          } else {
-            print('⚠️ [STOP SHARING] Backend session stop failed: ${backendResponse.message}');
-          }
-        }
-        
-        // Stop native background location tracking
-        try {
-          await NativeBackgroundLocationService.stopTracking();
-          print('✅ [STOP SHARING] Native background location tracking stopped');
-        } catch (e) {
-          print('⚠️ [STOP SHARING] Failed to stop native background tracking: $e');
-        }
-        
-        // Update Firebase
-        await userDoc.reference.set({
-          'sharingLocation': false,
-          'shareLocationContacts': [],
-          'shareLocationDuration': null,
-          'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
-          'locationSessionId': null, // Clear session ID
-          'locationClientId': null,
-        }, SetOptions(merge: true));
-        
-        print('✅ [STOP SHARING] Firebase updated');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location sharing stopped'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ [STOP SHARING] Error stopping location sharing: $e');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error stopping location sharing: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-    
-    if (mounted) setState(() => _stopping = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.green,
-                  child: const Icon(Icons.location_on, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sharing Location',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Text(
-                        'With ${widget.contactIds.length} contact(s)',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: _stopping ? null : _stopSharing,
-                  icon: _stopping 
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.stop, color: Colors.red),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

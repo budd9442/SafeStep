@@ -9,6 +9,11 @@ class LocationService {
     this.pollingIntervalMs = 10000; // 10 seconds
     this.clientTimeoutMs = 5000; // 5 seconds timeout for client requests
     this.maxRetries = 3; // Maximum retries for failed requests
+    
+    // Set up periodic expired session check (every 5 minutes)
+    this.expiredSessionCheckInterval = setInterval(() => {
+      this.checkExpiredSessions();
+    }, 5 * 60 * 1000); // 5 minutes
   }
 
   // Lazy initialization of Firestore
@@ -36,6 +41,11 @@ class LocationService {
     try {
       console.log(`🚀 [LOCATION SERVICE] Starting location sharing for session: ${sessionId}`);
       
+      // Calculate session duration and expiry time
+      const duration = metadata.duration || 'always';
+      const durationMs = this._parseDuration(duration);
+      const expiresAt = durationMs ? new Date(Date.now() + durationMs) : null;
+      
       // Create sharing session in database
       const sessionData = {
         sessionId,
@@ -43,6 +53,8 @@ class LocationService {
         phoneNumber,
         status: 'active',
         startedAt: new Date(),
+        expiresAt,
+        duration,
         lastLocationUpdate: null,
         totalLocationUpdates: 0,
         failedAttempts: 0,
@@ -59,10 +71,16 @@ class LocationService {
       this.activeSessions.set(sessionId, {
         clientId,
         phoneNumber,
-        metadata
+        metadata,
+        expiresAt
       });
 
-      console.log(`✅ [LOCATION SERVICE] Location sharing started for session: ${sessionId}`);
+      // Set up automatic session cleanup if duration is specified
+      if (expiresAt) {
+        this._scheduleSessionCleanup(sessionId, expiresAt);
+      }
+
+      console.log(`✅ [LOCATION SERVICE] Location sharing started for session: ${sessionId}, expires: ${expiresAt || 'never'}`);
       return { success: true, sessionId, status: 'active' };
       
     } catch (error) {
@@ -211,6 +229,63 @@ class LocationService {
         updatedAt: new Date()
       });
 
+      // Also update the user's Firebase document with the latest location for shared location feature
+      try {
+        const sessionDoc = await this.getDb().collection('location_sharing_sessions').doc(sessionId).get();
+        if (sessionDoc.exists) {
+          const sessionData = sessionDoc.data();
+          const phoneNumber = sessionData.phoneNumber;
+          
+          if (phoneNumber) {
+            // Find user by phone number
+            const userQuery = await this.getDb().collection('users')
+              .where('phoneNumber', '==', phoneNumber)
+              .limit(1)
+              .get();
+            
+            if (!userQuery.empty) {
+              const userDoc = userQuery.docs[0];
+              await userDoc.ref.update({
+                lastKnownLocation: {
+                  latitude: locationData.latitude,
+                  longitude: locationData.longitude,
+                  accuracy: locationData.accuracy,
+                  altitude: locationData.altitude,
+                  speed: locationData.speed,
+                  heading: locationData.heading,
+                  timestamp: locationData.timestamp
+                },
+                lastLocationUpdate: new Date()
+              });
+              console.log(`📍 [LOCATION SERVICE] Updated user ${userDoc.id} with latest location`);
+            } else {
+              // Try finding by document ID (phone number without tel: prefix)
+              const phoneWithoutTel = phoneNumber.replace('tel:', '');
+              const userDoc = await this.getDb().collection('users').doc(phoneWithoutTel).get();
+              
+              if (userDoc.exists) {
+                await userDoc.ref.update({
+                  lastKnownLocation: {
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    accuracy: locationData.accuracy,
+                    altitude: locationData.altitude,
+                    speed: locationData.speed,
+                    heading: locationData.heading,
+                    timestamp: locationData.timestamp
+                  },
+                  lastLocationUpdate: new Date()
+                });
+                console.log(`📍 [LOCATION SERVICE] Updated user ${userDoc.id} with latest location (by doc ID)`);
+              }
+            }
+          }
+        }
+      } catch (userUpdateError) {
+        console.error(`⚠️ [LOCATION SERVICE] Failed to update user document:`, userUpdateError);
+        // Don't throw error - location data was still saved successfully
+      }
+
       console.log(`💾 [LOCATION SERVICE] Location data saved for session: ${sessionId} from ${source}`);
       
     } catch (error) {
@@ -255,6 +330,108 @@ class LocationService {
   }
 
   /**
+   * Parse duration string to milliseconds
+   * @param {string} duration - Duration string ('1h', '8h', 'always')
+   * @returns {number|null} Duration in milliseconds or null for 'always'
+   */
+  _parseDuration(duration) {
+    if (!duration || duration === 'always') {
+      return null; // No expiry
+    }
+    
+    const durationMap = {
+      '1h': 60 * 60 * 1000,        // 1 hour
+      '8h': 8 * 60 * 60 * 1000,     // 8 hours
+      '1d': 24 * 60 * 60 * 1000,    // 1 day
+      '7d': 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+    
+    return durationMap[duration] || null;
+  }
+
+  /**
+   * Schedule automatic session cleanup
+   * @param {string} sessionId - Session ID to cleanup
+   * @param {Date} expiresAt - When the session should expire
+   */
+  _scheduleSessionCleanup(sessionId, expiresAt) {
+    const now = new Date();
+    const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+    
+    if (timeUntilExpiry <= 0) {
+      // Session already expired, cleanup immediately
+      this._autoStopSession(sessionId);
+      return;
+    }
+    
+    console.log(`⏰ [LOCATION SERVICE] Scheduling auto-cleanup for session ${sessionId} in ${Math.round(timeUntilExpiry / 1000)}s`);
+    
+    setTimeout(() => {
+      this._autoStopSession(sessionId);
+    }, timeUntilExpiry);
+  }
+
+  /**
+   * Automatically stop a session when it expires
+   * @param {string} sessionId - Session ID to stop
+   */
+  async _autoStopSession(sessionId) {
+    try {
+      console.log(`⏰ [LOCATION SERVICE] Auto-stopping expired session: ${sessionId}`);
+      
+      // Check if session is still active
+      const sessionInfo = this.activeSessions.get(sessionId);
+      if (!sessionInfo) {
+        console.log(`ℹ️ [LOCATION SERVICE] Session ${sessionId} already stopped`);
+        return;
+      }
+      
+      // Stop the session
+      await this.stopLocationSharing(sessionId);
+      
+      // Update session status in database
+      await this.getDb().collection('location_sharing_sessions').doc(sessionId).update({
+        status: 'expired',
+        stoppedAt: new Date(),
+        stoppedBy: 'system',
+        reason: 'duration_expired'
+      });
+      
+      console.log(`✅ [LOCATION SERVICE] Session ${sessionId} auto-stopped due to expiry`);
+      
+    } catch (error) {
+      console.error(`❌ [LOCATION SERVICE] Failed to auto-stop session ${sessionId}:`, error);
+    }
+  }
+
+  /**
+   * Check for expired sessions and cleanup
+   */
+  async checkExpiredSessions() {
+    try {
+      const now = new Date();
+      const expiredSessions = [];
+      
+      for (const [sessionId, sessionInfo] of this.activeSessions.entries()) {
+        if (sessionInfo.expiresAt && sessionInfo.expiresAt <= now) {
+          expiredSessions.push(sessionId);
+        }
+      }
+      
+      for (const sessionId of expiredSessions) {
+        await this._autoStopSession(sessionId);
+      }
+      
+      if (expiredSessions.length > 0) {
+        console.log(`🧹 [LOCATION SERVICE] Cleaned up ${expiredSessions.length} expired sessions`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ [LOCATION SERVICE] Error checking expired sessions:`, error);
+    }
+  }
+
+  /**
    * Get active sessions
    */
   getActiveSessions() {
@@ -266,6 +443,11 @@ class LocationService {
    */
   async cleanup() {
     console.log(`🧹 [LOCATION SERVICE] Cleaning up all active sessions`);
+    
+    // Clear the expired session check interval
+    if (this.expiredSessionCheckInterval) {
+      clearInterval(this.expiredSessionCheckInterval);
+    }
     
     const activeSessionIds = Array.from(this.activeSessions.keys());
     

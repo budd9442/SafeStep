@@ -26,7 +26,6 @@ class _HomeState extends State<Home> {
   String? _error;
   int? _currentIndex; // null: Map, 0: Menu, 1: Settings
   StreamSubscription<Position>? _positionStreamSubscription;
-  bool _featureOpen = false; // Track if a feature is open in MenuView
   List<DangerZone> _dangerZones = [];
   StreamSubscription<QuerySnapshot>? _dangerZoneSubscription;
   StreamSubscription<QuerySnapshot>? _inboxSubscription;
@@ -68,7 +67,7 @@ class _HomeState extends State<Home> {
         .snapshots()
         .listen((snapshot) {
       final zones = snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return DangerZone(
           LatLng((data['lat'] ?? 0.0) * 1.0, (data['lng'] ?? 0.0) * 1.0),
           (data['radius'] ?? 0.0) * 1.0,
@@ -104,7 +103,7 @@ class _HomeState extends State<Home> {
           .snapshots()
           .listen((snapshot) async {
         for (final doc in snapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           final String type = (data['type'] ?? '').toString();
           if (type == 'share_location') {
             final String fromName = (data['fromName'] ?? 'Someone').toString();
@@ -221,18 +220,6 @@ class _HomeState extends State<Home> {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(initialMessage: message, initialMessageRole: 'user'),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
-          return SlideTransition(position: animation.drive(tween), child: child);
-        },
-      ),
-    );
-  }
-
-  void _openSafeChatWithId(String chatId) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(chatId: chatId),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
           return SlideTransition(position: animation.drive(tween), child: child);
@@ -484,7 +471,7 @@ class _HomeState extends State<Home> {
                         )
                       : _currentIndex == 0
                           ? MenuView(
-                              onFeatureOpen: (open) => setState(() => _featureOpen = open),
+                              onFeatureOpen: (open) => setState(() {}),
                               onAddDangerZone: _addDangerZone,
                               currentPosition: _currentPosition,
                             )
@@ -646,46 +633,45 @@ class _ActiveContactAvatars extends StatelessWidget {
       );
     }
     
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('isAuthenticated', isEqualTo: true)
-          .limit(1)
-          .snapshots()
-          .asyncExpand((snapshot) {
-            if (snapshot.docs.isEmpty) {
-              return Stream<QuerySnapshot>.empty();
-            }
-            final userDoc = snapshot.docs.first;
-            return FirebaseFirestore.instance
-                .collection('users')
-                .doc(userDoc.id)
-                .collection('contacts')
-                .where(FieldPath.documentId, whereIn: contactIds.length > 10 ? contactIds.sublist(0, 10) : contactIds)
-                .snapshots();
-          }),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+    return FutureBuilder<String?>(
+      future: LocalSession.getCurrentUserId(),
+      builder: (context, userIdSnapshot) {
+        if (!userIdSnapshot.hasData || userIdSnapshot.data == null) {
           return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
         }
-        final docs = snapshot.data!.docs;
-        return Row(
-          children: [
-            for (final doc in docs)
-              Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: _ActiveContactAvatar(
-                  name: doc['name'] ?? '',
-                  image: _getSafeImageField(doc),
-                ),
-              ),
-            if (docs.length < contactIds.length)
-              for (int i = docs.length; i < contactIds.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4.0),
-                  child: _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
-                ),
-          ],
+        
+        final currentUserId = userIdSnapshot.data!;
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUserId)
+              .collection('contacts')
+              .where(FieldPath.documentId, whereIn: contactIds.length > 10 ? contactIds.sublist(0, 10) : contactIds)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return Row(children: [for (var _ in contactIds) _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8))]);
+            }
+            final docs = snapshot.data!.docs;
+            return Row(
+              children: [
+                for (final doc in docs)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4.0),
+                    child: _ActiveContactAvatar(
+                      name: doc['name'] ?? '',
+                      image: _getSafeImageField(doc),
+                    ),
+                  ),
+                if (docs.length < contactIds.length)
+                  for (int i = docs.length; i < contactIds.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4.0),
+                      child: _TinyContactAvatar(icon: Icons.person, color: Color(0xFF8F5FE8)),
+                    ),
+              ],
+            );
+          },
         );
       },
     );
@@ -870,24 +856,21 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
           const SizedBox(height: 18),
           SizedBox(
             height: 110,
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .where('isAuthenticated', isEqualTo: true)
-                  .limit(1)
-                  .snapshots()
-                  .asyncExpand((snapshot) {
-                    if (snapshot.docs.isEmpty) {
-                      return Stream<QuerySnapshot>.empty();
-                    }
-                    final userDoc = snapshot.docs.first;
-                    return FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(userDoc.id)
-                        .collection('contacts')
-                        .orderBy('createdAt', descending: true)
-                        .snapshots();
-                  }),
+            child: FutureBuilder<String?>(
+              future: LocalSession.getCurrentUserId(),
+              builder: (context, userIdSnapshot) {
+                if (!userIdSnapshot.hasData || userIdSnapshot.data == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                
+                final currentUserId = userIdSnapshot.data!;
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(currentUserId)
+                      .collection('contacts')
+                      .orderBy('createdAt', descending: true)
+                      .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -925,6 +908,8 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
                       ),
                     );
                   },
+                );
+              },
                 );
               },
             ),

@@ -1,19 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/location_service.dart';
+import 'local_session.dart';
+import 'location_database.dart';
 
 class NativeBackgroundLocationService {
   static Timer? _locationTimer;
   static bool _isRunning = false;
   static String? _currentSessionId;
-  static const Duration _updateInterval = Duration(seconds: 10);
   static FlutterLocalNotificationsPlugin? _notifications;
+  static StreamSubscription<Position>? _locationSubscription;
 
   // Initialize the service
   static Future<bool> initialize() async {
@@ -78,20 +77,42 @@ class NativeBackgroundLocationService {
   }
 
   // Start background location tracking
-  static Future<bool> startTracking() async {
+  static Future<bool> startTracking({String? sessionId}) async {
     try {
       if (_isRunning) {
-        print('⚠️ [NATIVE BACKGROUND] Service is already running');
-        return true;
+        print('⚠️ [NATIVE BACKGROUND] Service is already running, restarting with new session');
+        print('🔄 [NATIVE BACKGROUND] Current session ID: $_currentSessionId');
+        print('🔄 [NATIVE BACKGROUND] New session ID: $sessionId');
+        await stopTracking();
+        await Future.delayed(Duration(milliseconds: 500));
+        print('✅ [NATIVE BACKGROUND] Service stopped, ready to restart');
       }
 
       print('🚀 [NATIVE BACKGROUND] Starting native background location tracking');
 
-      // Check if user is sharing location
-      final isSharing = await _checkIfUserIsSharing();
-      if (!isSharing) {
-        print('❌ [NATIVE BACKGROUND] User is not sharing location');
-        return false;
+      // If sessionId is provided, use it directly
+      if (sessionId != null) {
+        _currentSessionId = sessionId;
+        print('✅ [NATIVE BACKGROUND] Using provided session ID: $_currentSessionId');
+      } else {
+        // Check if user is sharing location with retry mechanism
+        bool isSharing = false;
+        int retryCount = 0;
+        const maxRetries = 3;
+        
+        while (!isSharing && retryCount < maxRetries) {
+          isSharing = await _checkIfUserIsSharing();
+          if (!isSharing) {
+            retryCount++;
+            print('⏳ [NATIVE BACKGROUND] Retry $retryCount/$maxRetries - waiting for sharing status...');
+            await Future.delayed(Duration(milliseconds: 500 * retryCount));
+          }
+        }
+        
+        if (!isSharing) {
+          print('❌ [NATIVE BACKGROUND] User is not sharing location after $maxRetries retries');
+          return false;
+        }
       }
 
       // Show persistent notification
@@ -102,13 +123,15 @@ class NativeBackgroundLocationService {
       // Start location service with native background capabilities
       await _startNativeLocationService();
 
-      // Start periodic updates
-      _locationTimer = Timer.periodic(_updateInterval, (timer) {
-        _updateLocation();
-      });
-
       // Update location immediately
       await _updateLocation();
+
+      // Force a few location updates to test
+      print('🔄 [NATIVE BACKGROUND] Forcing initial location updates...');
+      for (int i = 0; i < 3; i++) {
+        await Future.delayed(Duration(seconds: 2));
+        await _updateLocation();
+      }
 
       print('✅ [NATIVE BACKGROUND] Native background location tracking started');
       return true;
@@ -122,14 +145,19 @@ class NativeBackgroundLocationService {
   // Start native location service
   static Future<void> _startNativeLocationService() async {
     try {
+      // Cancel existing subscription if any
+      await _locationSubscription?.cancel();
+      
       // Configure location settings for background tracking
       const locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 10, // Update every 10 meters
       );
 
+      print('🔄 [NATIVE BACKGROUND] Starting location stream...');
+
       // Start location service
-      await Geolocator.getPositionStream(
+      _locationSubscription = Geolocator.getPositionStream(
         locationSettings: locationSettings,
       ).listen(
         (Position position) {
@@ -150,14 +178,20 @@ class NativeBackgroundLocationService {
 
   // Handle native location updates
   static void _handleNativeLocationUpdate(Position position) {
-    if (!_isRunning || _currentSessionId == null) return;
+    print('📍 [NATIVE BACKGROUND] Location update received: ${position.latitude}, ${position.longitude}');
+    print('🔍 [NATIVE BACKGROUND] Service running: $_isRunning, Session ID: $_currentSessionId');
+    
+    if (!_isRunning || _currentSessionId == null) {
+      print('⚠️ [NATIVE BACKGROUND] Skipping location update - service not running or no session ID');
+      return;
+    }
 
     // Convert to our LocationData format
     final locationData = LocationData(
       latitude: position.latitude,
       longitude: position.longitude,
       accuracy: position.accuracy,
-      timestamp: position.timestamp?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      timestamp: position.timestamp.toIso8601String(),
       altitude: position.altitude,
       speed: position.speed,
       heading: position.heading,
@@ -170,7 +204,7 @@ class NativeBackgroundLocationService {
     ).then((response) {
       if (response.success) {
         print('✅ [NATIVE BACKGROUND] Location update sent successfully');
-        _updateFirebaseLocation(locationData);
+        _saveLocationToSQLite(locationData);
       } else {
         print('❌ [NATIVE BACKGROUND] Failed to send location update: ${response.message}');
       }
@@ -204,7 +238,7 @@ class NativeBackgroundLocationService {
         iOS: iosDetails,
       );
 
-      await _notifications!.show(
+      await _notifications?.show(
         1001,
         'SafeStep Location Tracking',
         'Your location is being shared with your contacts',
@@ -230,11 +264,13 @@ class NativeBackgroundLocationService {
 
       _locationTimer?.cancel();
       _locationTimer = null;
+      await _locationSubscription?.cancel();
+      _locationSubscription = null;
       _isRunning = false;
       _currentSessionId = null;
 
       // Cancel notification
-      await _notifications?.cancel(1001);
+      await _notifications!.cancel(1001);
 
       print('✅ [NATIVE BACKGROUND] Native background location tracking stopped');
 
@@ -246,31 +282,47 @@ class NativeBackgroundLocationService {
   // Check if user is currently sharing location
   static Future<bool> _checkIfUserIsSharing() async {
     try {
-      final usersQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('isAuthenticated', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (usersQuery.docs.isEmpty) {
+      final localUserId = await LocalSession.getCurrentUserId();
+      if (localUserId == null || localUserId.isEmpty) {
+        print('❌ [NATIVE BACKGROUND] No local session found');
         return false;
       }
 
-      final userDoc = usersQuery.docs.first;
-      final userData = userDoc.data();
-      final isSharing = userData['sharingLocation'] == true;
-      final sessionId = userData['locationSessionId'];
-
-      if (isSharing && sessionId != null) {
-        _currentSessionId = sessionId;
-        print('✅ [NATIVE BACKGROUND] User is sharing location, session: $sessionId');
+      // Check SQLite for active session
+      final activeSession = await LocationDatabase.getActiveSession(localUserId);
+      if (activeSession != null) {
+        // Verify session is still active on backend
+        final isStillActive = await _verifySessionOnBackend(activeSession['session_id']);
+        if (!isStillActive) {
+          print('⚠️ [NATIVE BACKGROUND] Session expired on backend, stopping local session');
+          await LocationDatabase.endSession(activeSession['session_id']);
+          return false;
+        }
+        
+        _currentSessionId = activeSession['session_id'];
+        print('✅ [NATIVE BACKGROUND] User is sharing location, session: $_currentSessionId');
         return true;
       }
 
+      print('❌ [NATIVE BACKGROUND] User is not sharing location or session ID missing');
       return false;
 
     } catch (e) {
       print('❌ [NATIVE BACKGROUND] Error checking sharing status: $e');
+      return false;
+    }
+  }
+
+  // Verify if session is still active on backend
+  static Future<bool> _verifySessionOnBackend(String sessionId) async {
+    try {
+      final response = await LocationService.getSessionStatus(sessionId);
+      if (response.success && response.sessionData != null) {
+        return response.sessionData!['isActive'] == true && response.sessionData!['status'] == 'active';
+      }
+      return false;
+    } catch (e) {
+      print('❌ [NATIVE BACKGROUND] Error verifying session on backend: $e');
       return false;
     }
   }
@@ -305,7 +357,7 @@ class NativeBackgroundLocationService {
 
       if (response.success) {
         print('✅ [NATIVE BACKGROUND] Location update sent successfully');
-        await _updateFirebaseLocation(locationData);
+        await _saveLocationToSQLite(locationData);
       } else {
         print('❌ [NATIVE BACKGROUND] Failed to send location update: ${response.message}');
         
@@ -321,34 +373,29 @@ class NativeBackgroundLocationService {
     }
   }
 
-  // Update Firebase with latest location
-  static Future<void> _updateFirebaseLocation(LocationData locationData) async {
+  // Save location data to SQLite
+  static Future<void> _saveLocationToSQLite(LocationData locationData) async {
     try {
-      final usersQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('isAuthenticated', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (usersQuery.docs.isNotEmpty) {
-        final userDoc = usersQuery.docs.first;
-        await userDoc.reference.update({
-          'lastKnownLocation': {
-            'latitude': locationData.latitude,
-            'longitude': locationData.longitude,
-            'accuracy': locationData.accuracy,
-            'timestamp': locationData.timestamp,
-            'altitude': locationData.altitude,
-            'speed': locationData.speed,
-            'heading': locationData.heading,
-          },
-          'lastLocationUpdate': FieldValue.serverTimestamp(),
-        });
-        
-        print('✅ [NATIVE BACKGROUND] Firebase location updated');
+      if (_currentSessionId == null) {
+        print('❌ [NATIVE BACKGROUND] No session ID for location save');
+        return;
       }
+
+      await LocationDatabase.saveLocationData(
+        sessionId: _currentSessionId!,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        accuracy: locationData.accuracy,
+        altitude: locationData.altitude,
+        speed: locationData.speed,
+        heading: locationData.heading,
+        timestamp: DateTime.parse(locationData.timestamp).millisecondsSinceEpoch,
+      );
+
+      print('✅ [NATIVE BACKGROUND] Location saved to SQLite');
+
     } catch (e) {
-      print('❌ [NATIVE BACKGROUND] Error updating Firebase location: $e');
+      print('❌ [NATIVE BACKGROUND] Error saving location to SQLite: $e');
     }
   }
 
@@ -361,8 +408,27 @@ class NativeBackgroundLocationService {
   // Force location update (for testing)
   static Future<void> forceLocationUpdate() async {
     if (_isRunning) {
+      print('🔄 [NATIVE BACKGROUND] Forcing location update...');
       await _updateLocation();
+    } else {
+      print('⚠️ [NATIVE BACKGROUND] Service not running, cannot force update');
     }
+  }
+
+  // Force multiple location updates for testing
+  static Future<void> forceMultipleLocationUpdates() async {
+    if (!_isRunning) {
+      print('⚠️ [NATIVE BACKGROUND] Service not running, cannot force updates');
+      return;
+    }
+    
+    print('🔄 [NATIVE BACKGROUND] Forcing 5 location updates...');
+    for (int i = 0; i < 5; i++) {
+      print('📍 [NATIVE BACKGROUND] Force update ${i + 1}/5');
+      await _updateLocation();
+      await Future.delayed(Duration(seconds: 3));
+    }
+    print('✅ [NATIVE BACKGROUND] Completed forced location updates');
   }
 
   // Restart tracking (useful when app comes back to foreground)
@@ -386,3 +452,4 @@ class NativeBackgroundLocationService {
     // Native location service continues in background
   }
 }
+

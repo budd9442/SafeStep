@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -173,6 +172,44 @@ class LocationService {
     } catch (e) {
       print('❌ Get location history error: $e');
       return LocationHistoryResponse.error(
+        code: 'NETWORK_ERROR',
+        message: 'Network error: ${e.toString()}',
+      );
+    }
+  }
+
+  // Get session status
+  static Future<LocationSessionResponse> getSessionStatus(String sessionId) async {
+    try {
+      print('🔍 [LOCATION SERVICE] Getting session status: $sessionId');
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/location/session/$sessionId'),
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(_timeout);
+
+      print('📡 Session status response: ${response.statusCode}');
+      print('📄 Session status body: ${response.body}');
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        print('✅ Session status retrieved successfully');
+        return LocationSessionResponse.success(
+          sessionData: responseData['data'] ?? {},
+        );
+      } else {
+        print('❌ Failed to get session status: ${responseData['message']}');
+        return LocationSessionResponse.error(
+          code: responseData['code'] ?? 'UNKNOWN_ERROR',
+          message: responseData['message'] ?? 'Failed to get session status',
+        );
+      }
+    } catch (e) {
+      print('❌ Session status error: $e');
+      return LocationSessionResponse.error(
         code: 'NETWORK_ERROR',
         message: 'Network error: ${e.toString()}',
       );

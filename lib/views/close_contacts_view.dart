@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:safestep/services/local_session.dart';
 
 class CloseContactsView extends StatefulWidget {
   const CloseContactsView({super.key});
@@ -24,17 +25,11 @@ class _CloseContactsViewState extends State<CloseContactsView> {
 
   Future<void> _getCurrentUserId() async {
     try {
-      final usersQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('isAuthenticated', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (usersQuery.docs.isNotEmpty) {
-        setState(() {
-          _userId = usersQuery.docs.first.id;
-        });
-      }
+      final localUserId = await LocalSession.getCurrentUserId();
+      if (!mounted) return;
+      setState(() {
+        _userId = localUserId;
+      });
     } catch (e) {
       print('Error getting current user ID: $e');
     }
