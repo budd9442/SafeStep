@@ -315,7 +315,11 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              color: const Color(0xFFF3EFFF),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF3EFFF), Color(0xFFE9E3F7), Color(0xFFD1C4E9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
               boxShadow: [
                 BoxShadow(
@@ -335,7 +339,20 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
                 onTapCancel: () => _controller.reverse(),
                 child: Stack(
                   children: [
-                   
+                    
+                    // Decorative bottom-left accent
+                    Positioned(
+                      bottom: 10,
+                      left: 10,
+                      child: Container(
+                        width: 28,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8F5FE8).withOpacity(0.13),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
