@@ -613,35 +613,55 @@ class _HomeScreenState extends State<HomeScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: Padding(
-            padding: const EdgeInsets.only(left: 12.0),
-            child: CircleAvatar(
-              backgroundColor: const Color(0xFF8F5FE8),
-              child: Icon(Icons.shield, color: Colors.white),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        automaticallyImplyLeading: false, // removes default back button spacing
+        title: Row(
+          children: [
+            Image.asset(
+              "assets/SafeStep.png",
+              height: 40, // adjust as needed
             ),
-          ),
-          title: const Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(text: 'Safe', style: TextStyle(color: Color(0xFF8F5FE8), fontWeight: FontWeight.bold)),
-                TextSpan(text: 'Step', style: TextStyle(color: Color(0xFF232946), fontWeight: FontWeight.bold)),
-              ],
-            ),
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-          ),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                await _logout();
-              },
-              tooltip: 'Logout',
+            const SizedBox(width: 6),
+            const Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Safe',
+                    style: TextStyle(
+                      color: Color(0xFF8F5FE8),
+                      fontWeight: FontWeight.bold,
+                      fontFamily: "QuintessentialCustom"
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Step',
+                    style: TextStyle(
+                      color: Color(0xFF232946),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await _logout();
+            },
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+
         body: Stack(
           children: [
             // Main content
