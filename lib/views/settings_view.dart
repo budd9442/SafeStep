@@ -7,6 +7,10 @@ import 'package:safestep/views/map_view.dart';
 import 'package:safestep/services/local_session.dart';
 import 'ai_personalization_screen.dart';
 import 'package:safestep/views/profile_settings_view.dart';
+import 'package:safestep/views/privacy_settings_view.dart';
+import 'package:safestep/views/notifications_settings_view.dart';
+import 'package:safestep/views/language_settings_view.dart';
+import 'package:safestep/views/help_support_view.dart';
 
 class SettingsView extends StatelessWidget {
   final ValueChanged<String>? onProfilePicChanged;
@@ -91,6 +95,22 @@ class _SettingsTile extends StatelessWidget {
           } else if (label == 'AI Assistant Settings') {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AIPersonalizationScreen()),
+            );
+          } else if (label == 'Privacy') {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PrivacySettingsView()),
+            );
+          } else if (label == 'Notifications') {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsSettingsView()),
+            );
+          } else if (label == 'Language') {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LanguageSettingsView()),
+            );
+          } else if (label == 'Help & Support') {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HelpSupportView()),
             );
           }
         },

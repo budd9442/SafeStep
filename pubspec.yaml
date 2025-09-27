@@ -109,6 +109,10 @@ flutter:
     - assets/chat.jpg
     - assets/screen2.png
     - assets/screen3.png
+    - assets/c1.png
+    - assets/c2.jpg
+    - assets/c3.png
+    - assets/c4.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

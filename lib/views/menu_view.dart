@@ -8,6 +8,13 @@ import 'package:safestep/views/debug_screen.dart';
 import 'package:safestep/views/activity_monitor_view.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+// --- Primary Theme Colors (Refined for Elegance & Clarity) ---
+const Color _primaryViolet = Color(0xFF8F5FE8);     // Main theme violet
+const Color _lightViolet = Color(0xFFD1C4E9);       // Soft violet background mid-tone
+const Color _cardSurface = Colors.white;            // Crisp white card background
+const Color _darkText = Color(0xFF232946);          // Dark, readable text
+const Color _subtleAccent = Color(0xFFF3EFFF);      // Very light background accent
+
 class MenuView extends StatefulWidget {
   final ValueChanged<bool>? onFeatureOpen;
   final void Function(LatLng, double)? onAddDangerZone;
@@ -71,13 +78,14 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
       child: SlideTransition(
         position: _slideAnimation,
         child: Container(
+          // THEME BACKGROUND: Soft violet gradient
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
                 Color(0xFFB39DDB),
-                Color(0xFFD1C4E9),
+                _lightViolet,
                 Color(0xFFF8F9FF),
               ],
             ),
@@ -86,22 +94,28 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
-                // Header
+                // --- Header (Safety Tools Card) ---
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF8F5FE8),
+                            Color(0xFFD1C4E9),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            color: Colors.black.withOpacity(0.10),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
                           ),
                         ],
-                        border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
@@ -109,15 +123,15 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Material(
-                              color: const Color(0xFFF6F4FB),
+                              color: Colors.white.withOpacity(0.18),
                               shape: const CircleBorder(),
                               elevation: 0,
                               child: InkWell(
                                 customBorder: const CircleBorder(),
                                 onTap: () => Navigator.of(context).maybePop(),
                                 child: const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Icon(Icons.arrow_back, color: Color(0xFF8F5FE8), size: 28),
+                                  padding: EdgeInsets.all(10.0),
+                                  child: Icon(Icons.arrow_back, color: Colors.white, size: 28),
                                 ),
                               ),
                             ),
@@ -125,17 +139,23 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+                                children: const [
                                   Text(
                                     'Safety Tools',
                                     style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF232946),
-                                      letterSpacing: -0.5,
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      letterSpacing: -1.0,
+                                      shadows: [
+                                        Shadow(
+                                          color: Color(0x33000000),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  
                                 ],
                               ),
                             ),
@@ -145,11 +165,10 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                
-                
-                
+
+                // --- Feature Grid ---
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                   sliver: SliverGrid(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -158,22 +177,18 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                       mainAxisSpacing: 16,
                     ),
                     delegate: SliverChildListDelegate([
-                      _ModernMenuCard(
-                        icon: Icons.call,
+                      _ElegantMenuCard(
+                        icon: Icons.call_end,
                         label: 'Fake Call',
-                        subtitle: 'Simulate incoming call',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                        ),
+                        subtitle: 'Simulate incoming call to exit a situation.',
+                        iconColor: const Color(0xFF667eea), // Call Gradient Start
                         onTap: () => _openFeature(const FakeCallView()),
                       ),
-                      _ModernMenuCard(
-                        icon: Icons.report_gmailerrorred,
+                      _ElegantMenuCard(
+                        icon: Icons.warning_amber_rounded,
                         label: 'Report Danger',
-                        subtitle: 'Mark unsafe areas',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFf093fb), Color(0xFFf5576c)],
-                        ),
+                        subtitle: 'Mark unsafe areas on the map for community.',
+                        iconColor: const Color(0xFFf093fb), // Report Gradient Start
                         onTap: () => _openFeature(ReportDangerZoneView(
                           currentPosition: widget.currentPosition,
                           onDangerZoneChanged: widget.onAddDangerZone,
@@ -183,10 +198,9 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                   ),
                 ),
 
-                
-                
+                // --- Secondary Grid ---
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverGrid(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -195,32 +209,27 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                       mainAxisSpacing: 16,
                     ),
                     delegate: SliverChildListDelegate([
-                      _ModernMenuCard(
-                        icon: Icons.chat_bubble_outline,
-                        label: 'SafeChat',
-                        subtitle: 'AI-powered safety chat',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4facfe), Color(0xFF00f2fe)],
-                        ),
+                      _ElegantMenuCard(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        label: 'SafeChat AI',
+                        subtitle: 'AI-powered chat for tips and guided safety actions.',
+                        iconColor: const Color(0xFF4facfe), // Chat Gradient Start
                         onTap: () => _openFeature(const SafeChatView()),
                       ),
-                      _ModernMenuCard(
-                        icon: Icons.contacts,
+                      _ElegantMenuCard(
+                        icon: Icons.people_alt_outlined,
                         label: 'Close Contacts',
-                        subtitle: 'Manage trusted contacts',
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF43e97b), Color(0xFF38f9d7)],
-                        ),
+                        subtitle: 'Manage and share your location with trusted people.',
+                        iconColor: const Color(0xFF43e97b), // Contacts Gradient Start
                         onTap: () => _openFeature(const CloseContactsView()),
                       ),
                     ]),
                   ),
                 ),
 
-                
                 // Bottom spacing
                 const SliverToBoxAdapter(
-                  child: SizedBox(height: 32),
+                  child: SizedBox(height: 50),
                 ),
               ],
             ),
@@ -229,60 +238,33 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
       ),
     );
   }
-
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF8F5FE8).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            icon,
-            color: const Color(0xFF8F5FE8),
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A2E),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-class _ModernMenuCard extends StatefulWidget {
+// --- The "Elegance & Clarity" User-Friendly Card Widget ---
+class _ElegantMenuCard extends StatefulWidget {
   final IconData icon;
   final String label;
   final String subtitle;
-  final Gradient gradient;
+  final Color iconColor; // Single accent color for simplicity
   final VoidCallback onTap;
 
-  const _ModernMenuCard({
+  const _ElegantMenuCard({
     required this.icon,
     required this.label,
     required this.subtitle,
-    required this.gradient,
+    required this.iconColor,
     required this.onTap,
   });
 
   @override
-  State<_ModernMenuCard> createState() => _ModernMenuCardState();
+  State<_ElegantMenuCard> createState() => _ElegantMenuCardState();
 }
 
-class _ModernMenuCardState extends State<_ModernMenuCard>
+class _ElegantMenuCardState extends State<_ElegantMenuCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _elevationAnimation;
+  late Animation<double> _shadowElevation;
 
   @override
   void initState() {
@@ -291,11 +273,13 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    // Subtle press-in animation
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
-    _elevationAnimation = Tween<double>(begin: 8.0, end: 2.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    // Shadow lift animation
+    _shadowElevation = Tween<double>(begin: 12.0, end: 3.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
   }
 
@@ -313,19 +297,24 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
         return Transform.scale(
           scale: _scaleAnimation.value,
           child: Container(
+            // ELEGANCE & CLARITY DESIGN: Crisp white card body
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFF3EFFF), Color(0xFFE9E3F7), Color(0xFFD1C4E9)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
+              color: _cardSurface, 
+              border: Border.all(color: Colors.grey.shade100, width: 1.0),
               boxShadow: [
+                // Soft, clean lift shadow
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: _elevationAnimation.value,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: _shadowElevation.value,
+                  offset: const Offset(0, 5),
+                ),
+                // Subtle colored inner glow/ring (WOW factor)
+                BoxShadow(
+                  color: widget.iconColor.withOpacity(0.4),
+                  blurRadius: 20, 
+                  spreadRadius: -12,
+                  offset: const Offset(0, 0),
                 ),
               ],
             ),
@@ -337,64 +326,55 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
                 onTapDown: (_) => _controller.forward(),
                 onTapUp: (_) => _controller.reverse(),
                 onTapCancel: () => _controller.reverse(),
-                child: Stack(
-                  children: [
-                    
-                    // Decorative bottom-left accent
-                    Positioned(
-                      bottom: 10,
-                      left: 10,
-                      child: Container(
-                        width: 28,
-                        height: 8,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      // ICON: Vibrant, highly focused icon ring
+                      Container(
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8F5FE8).withOpacity(0.13),
-                          borderRadius: BorderRadius.circular(8),
+                          shape: BoxShape.circle,
+                          color: widget.iconColor.withOpacity(0.15),
+                          border: Border.all(color: widget.iconColor.withOpacity(0.4), width: 1.5),
+                        ),
+                        child: Icon(
+                          widget.icon,
+                          color: widget.iconColor,
+                          size: 32,
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Icon with background
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF8F5FE8).withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              widget.icon,
-                              color: const Color(0xFF8F5FE8),
-                              size: 24,
-                            ),
-                          ),
-                          const Spacer(),
-                          // Text content
-                          Text(
-                            widget.label,
-                            style: const TextStyle(
-                              color: Color(0xFF232946),
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.subtitle,
-                            style: const TextStyle(
-                              color: Color(0xFF6B7280),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 16),
+                      // Text content (Optimal Readability)
+                      Text(
+                        widget.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _darkText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.subtitle,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

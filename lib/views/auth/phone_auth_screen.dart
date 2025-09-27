@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:safestep/home_screen.dart';
+import 'package:safestep/views/auth/user_details_form_screen.dart';
 import 'package:safestep/views/onboarding_screens.dart';
 import '../../services/otp_service.dart';
 import '../../services/local_session.dart';
@@ -212,6 +214,69 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     if (verifyResponse.success) {
       final phoneNumber = verifyResponse.phoneNumber!;
+
+      final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
+
+      if (userExistsResponse.success) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserDetailsFormScreen(
+                phoneNumber: phoneNumber,
+                onComplete: () {
+                  if (mounted) {
+                    widget.onAuthSuccess?.call();
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _error = verifyResponse.message;
+          _loading = false;
+        });
+      }
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() {
+        _error = 'Failed to verify OTP: ${e.toString()}';
+        _loading = false;
+      });
+    }
+  }
+}
+
+  /*Future<void> _verifyOTP() async {
+  if (_otpReference == null) return;
+
+  setState(() {
+    _loading = true;
+    _error = null;
+  });
+
+  try {
+    final verifyResponse = await OTPService.verifyOTP(
+      reference: _otpReference!,
+      otp: _otpController.text.trim(),
+    );
+
+    if (verifyResponse.success) {
+      final phoneNumber = verifyResponse.phoneNumber!;
       print('✅ OTP verified successfully for: $phoneNumber');
 
       // ✅ Navigate to Onboarding screen after OTP
@@ -242,7 +307,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       });
     }
   }
-}
+}*/
 
 
   Future<void> _loginExistingUser(String phoneNumber, Map<String, dynamic>? userData) async {
