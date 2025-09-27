@@ -26,6 +26,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // bool _showMap = false; // No longer needed, always show map
   LatLng? _currentPosition;
   bool _loading = true;
   String? _error;
@@ -43,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onNavTap(int index) {
     setState(() {
       _currentIndex = index;
+      // _showMap = false; // No longer needed
     });
   }
 
@@ -596,6 +598,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _openProfileSettings() {
+    // Use the same navigation as the settings tile
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ProfileSettingsRouteProxy()),
+    );
+  }
+
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
@@ -613,149 +622,169 @@ class _HomeScreenState extends State<HomeScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false, // removes default back button spacing
-        title: Row(
-          children: [
-            Image.asset(
-              "assets/SafeStep.png",
-              height: 40, // adjust as needed
-            ),
-            const SizedBox(width: 6),
-            const Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Safe',
-                    style: TextStyle(
-                      color: Color(0xFF8F5FE8),
-                      fontWeight: FontWeight.bold,
-                      fontFamily: "QuintessentialCustom"
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'Step',
-                    style: TextStyle(
-                      color: Color(0xFF232946),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+          backgroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: Row(
+            children: [
+              Image.asset(
+                "assets/SafeStep.png",
+                height: 40,
               ),
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
+              const SizedBox(width: 6),
+              const Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Safe',
+                      style: TextStyle(
+                        color: Color(0xFF8F5FE8),
+                        fontWeight: FontWeight.bold,
+                        fontFamily: "QuintessentialCustom",
+                        fontSize: 20,
+                      ),
+                    ),
+                    TextSpan(
+                      text: 'Step',
+                      style: TextStyle(
+                        color: Color(0xFF8F5FE8),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ],
+          ),
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.person, color: Color(0xFF8F5FE8)),
+              onSelected: (value) async {
+                if (value == 'profile') {
+                  _openProfileSettings();
+                } else if (value == 'logout') {
+                  await _logout();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'profile',
+                  child: ListTile(
+                    leading: Icon(Icons.settings),
+                    title: Text('Settings'),
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: ListTile(
+                    leading: Icon(Icons.logout),
+                    title: Text('Logout'),
+                  ),
+                ),
+              ],
+              tooltip: 'Account',
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _logout();
-            },
-            tooltip: 'Logout',
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFB39DDB), // purple top
+                Color(0xFFD1C4E9),
+                Color(0xFFE9E3F7),
+                Color(0xFFF6F4FB),
+                Color(0xFFD1C4E9),
+                Color(0xFFB39DDB), // purple bottom
+              ],
+              stops: [0.0, 0.18, 0.5, 0.82, 0.92, 1.0],
+            ),
           ),
-        ],
-      ),
-
-        body: Stack(
-          children: [
-            // Main content
-            Column(
-              children: [
-
-                Expanded(
-                  child: _currentIndex == null
-                      ? Stack(
-                          children: [
-                            // Map background
-                            MapView(
-                              key: _mapViewKey,
-                              currentPosition: _currentPosition,
-                              loading: _loading,
-                              error: _error,
-                              dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
-                              sharedLocations: _sharedLocations,
-                              onDangerZoneTap: _onDangerZoneTap,
-                            ),
-                            // Overlay ShareLocationCard or ActiveShareLocationPanel on top of map
-                            Positioned(
-                              top: 16,
-                              left: 16,
-                              right: 16,
-                              child: FutureBuilder<String?>(
-                                future: LocalSession.getCurrentUserId(),
-                                builder: (context, userIdSnapshot) {
-                                  if (!userIdSnapshot.hasData || userIdSnapshot.data == null) {
-                                    return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
-                                  }
-                                  
-                                  final userId = userIdSnapshot.data!;
-                                  return StreamBuilder<DocumentSnapshot>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(userId)
-                                        .snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData) {
-                                        return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
-                                      }
-                                      
-                                      final data = snapshot.data!.data() as Map<String, dynamic>?;
-                                      final sharing = data != null && data['sharingLocation'] == true;
-                                      
-                                      if (sharing) {
-                                        final List contacts = (data['shareLocationContacts'] ?? []) as List;
-                                        return ActiveShareLocationPanel(
-                                          contactIds: contacts.cast<String>(),
-                                        );
-                                      } else {
-                                        return ShareLocationCard(onShare: () => _showShareLocationSheet(context));
-                                      }
-                                    },
-                                  );
-                                },
+          child: _currentIndex == null
+              ? Stack(
+                  children: [
+                    // Map container in the background
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), // Match top and bottom gap
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Material(
+                              elevation: 8,
+                              borderRadius: BorderRadius.circular(24),
+                              child: SizedBox(
+                                height: 500,
+                                width: double.infinity,
+                                child: MapView(
+                                  key: _mapViewKey,
+                                  currentPosition: _currentPosition,
+                                  loading: _loading,
+                                  error: _error,
+                                  dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
+                                  onDangerZoneTap: _onDangerZoneTap,
+                                ),
                               ),
                             ),
-                          
-
-                          ],
-                        )
-                      : _currentIndex == 0
-                          ? MenuView(
-                              onFeatureOpen: (open) => setState(() {}),
-                              onAddDangerZone: _addDangerZone,
-                              currentPosition: _currentPosition,
-                            )
-                          : SettingsView(onProfilePicChanged: _onProfilePicChanged),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: SizedBox(height: 60), // Spacer for FAB
-                ),
-              ],
-            ),
-            // Custom bottom navigation bar with panic button
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomBottomNavigationBar(
-                    currentIndex: _currentIndex,
-                    onTap: _onNavTap,
-                  ),
-                  _buildAnimatedChatBar(),
-                ],
-              ),
-            ),
-          ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Foreground: ShareLocationCard/ActiveShareLocationPanel
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          child: StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .where('isAuthenticated', isEqualTo: true)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                return ShareLocationCard(
+                                  onShare: () => _showShareLocationSheet(context),
+                                  onLocationIconTap: null,
+                                );
+                              }
+                              final userDoc = snapshot.data!.docs.first;
+                              final data = userDoc.data() as Map<String, dynamic>?;
+                              final sharing = data != null && data['sharingLocation'] == true;
+                              if (sharing) {
+                                final List contacts = (data['shareLocationContacts'] ?? []) as List;
+                                return ActiveShareLocationPanel(
+                                  contactIds: contacts.cast<String>(),
+                                  onLocationIconTap: null,
+                                );
+                              } else {
+                                return ShareLocationCard(
+                                  onShare: () => _showShareLocationSheet(context),
+                                  onLocationIconTap: null,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ],
+                )
+              : _currentIndex == 0
+                  ? MenuView(
+                      onFeatureOpen: (open) => setState(() => _featureOpen = open),
+                      onAddDangerZone: _addDangerZone,
+                      currentPosition: _currentPosition,
+                    )
+                  : SettingsView(onProfilePicChanged: _onProfilePicChanged),
+        ),
+        bottomNavigationBar: CustomBottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: _onNavTap,
         ),
       ),
     );
@@ -763,9 +792,11 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // Panel shown when sharing location is active
+
 class ActiveShareLocationPanel extends StatefulWidget {
   final List<String> contactIds;
-  const ActiveShareLocationPanel({required this.contactIds, Key? key}) : super(key: key);
+  final VoidCallback? onLocationIconTap;
+  const ActiveShareLocationPanel({required this.contactIds, this.onLocationIconTap, Key? key}) : super(key: key);
 
   @override
   State<ActiveShareLocationPanel> createState() => _ActiveShareLocationPanelState();
@@ -833,10 +864,13 @@ class _ActiveShareLocationPanelState extends State<ActiveShareLocationPanel> {
         children: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              radius: 30,
-              backgroundColor: const Color(0xFF8F5FE8),
-              child: const Icon(Icons.location_on, color: Colors.white, size: 32),
+            child: GestureDetector(
+              onTap: widget.onLocationIconTap,
+              child: CircleAvatar(
+                radius: 30,
+                backgroundColor: const Color(0xFF8F5FE8),
+                child: const Icon(Icons.location_on, color: Colors.white, size: 32),
+              ),
             ),
           ),
           Expanded(
@@ -947,9 +981,11 @@ class _ActiveContactAvatars extends StatelessWidget {
   }
 }
 
+
 class ShareLocationCard extends StatelessWidget {
   final VoidCallback onShare;
-  const ShareLocationCard({required this.onShare, super.key});
+  final VoidCallback? onLocationIconTap;
+  const ShareLocationCard({required this.onShare, this.onLocationIconTap, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -969,10 +1005,13 @@ class ShareLocationCard extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.all(14.0),
-            child: CircleAvatar(
-              radius: 30,
-              child: Icon(Icons.location_on_outlined, size: 32, color: Color(0xFFFFFFFF)),
-              backgroundColor: Color(0xFF8F5FE8),
+            child: GestureDetector(
+              onTap: onLocationIconTap,
+              child: CircleAvatar(
+                radius: 30,
+                child: Icon(Icons.location_on_outlined, size: 32, color: Color(0xFFFFFFFF)),
+                backgroundColor: Color(0xFF8F5FE8),
+              ),
             ),
           ),
           Expanded(

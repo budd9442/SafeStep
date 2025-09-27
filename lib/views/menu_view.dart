@@ -71,13 +71,14 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
       child: SlideTransition(
         position: _slideAnimation,
         child: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white,
-                const Color(0xFFF8F9FF),
+                Color(0xFFB39DDB),
+                Color(0xFFD1C4E9),
+                Color(0xFFF8F9FF),
               ],
             ),
           ),
@@ -88,29 +89,67 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                 // Header
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Safety Tools',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1A1A2E),
-                            letterSpacing: -0.5,
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
+                        ],
+                        border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Material(
+                              color: const Color(0xFFF6F4FB),
+                              shape: const CircleBorder(),
+                              elevation: 0,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () => Navigator.of(context).maybePop(),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Icon(Icons.arrow_back, color: Color(0xFF8F5FE8), size: 28),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 18),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Safety Tools',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF232946),
+                                      letterSpacing: -0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                  Text(
+                                    'Choose your safety feature',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: Color(0xFF6B7280),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Choose your safety feature',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: const Color(0xFF6B7280),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -295,49 +334,57 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
           scale: _scaleAnimation.value,
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFFF3EFFF),
+              border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withOpacity(0.06),
                   blurRadius: _elevationAnimation.value,
-                  offset: const Offset(0, 4),
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(20),
                 onTap: widget.onTap,
                 onTapDown: (_) => _controller.forward(),
                 onTapUp: (_) => _controller.reverse(),
                 onTapCancel: () => _controller.reverse(),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: widget.gradient,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      color: Colors.white.withOpacity(0.1),
+                child: Stack(
+                  children: [
+                    // Background image with transparency
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Opacity(
+                        opacity: 0.18,
+                        child: Image.asset(
+                          'assets/card_bg.png',
+                          width: 68,
+                          height: 68,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
+                    Padding(
+                      padding: const EdgeInsets.all(18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Icon with background
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(16),
+                              color: const Color(0xFF8F5FE8).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(
                               widget.icon,
-                              color: Colors.white,
-                              size: 28,
+                              color: const Color(0xFF8F5FE8),
+                              size: 24,
                             ),
                           ),
                           const Spacer(),
@@ -345,8 +392,8 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
                           Text(
                             widget.label,
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
+                              color: Color(0xFF232946),
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
                               letterSpacing: -0.5,
                             ),
@@ -354,16 +401,16 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
                           const SizedBox(height: 4),
                           Text(
                             widget.subtitle,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 13,
+                            style: const TextStyle(
+                              color: Color(0xFF6B7280),
+                              fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),

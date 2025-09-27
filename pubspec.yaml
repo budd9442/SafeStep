@@ -103,6 +103,7 @@ flutter:
     - assets/img3.png
     - assets/screen.png
     - assets/SafeStep.png
+    - assets/card_bg.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

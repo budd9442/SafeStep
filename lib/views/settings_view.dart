@@ -100,8 +100,8 @@ class _SettingsTile extends StatelessWidget {
 }
 
 // Lightweight proxy to avoid importing the big screen at top-level to keep diffs minimal
-class _ProfileSettingsRouteProxy extends StatelessWidget {
-  const _ProfileSettingsRouteProxy();
+class ProfileSettingsRouteProxy extends StatelessWidget {
+  const ProfileSettingsRouteProxy();
   @override
   Widget build(BuildContext context) {
     // Import deferred by direct reference
