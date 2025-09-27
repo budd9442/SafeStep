@@ -100,10 +100,11 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
                     child: Container(
                       decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white),
                         gradient: const LinearGradient(
                           colors: [
                             Color(0xFF8F5FE8),
-                            Color(0xFFD1C4E9),
+                            Color.fromARGB(255, 174, 143, 228),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
