@@ -122,124 +122,460 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile Settings'),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        CircleAvatar(
-                          radius: 48,
-                          backgroundImage: (() {
-                            final url = (_userData?['profilePicUrl'] ?? _userData?['profilePic']) as String?;
-                            if (url != null && url.isNotEmpty) {
-                              return NetworkImage(url);
-                            }
-                            return null;
-                          })(),
-                          child: ((_userData?['profilePicUrl'] ?? _userData?['profilePic']) == null)
-                              ? const Icon(Icons.person, size: 48)
-                              : null,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _uploading ? null : _pickAndUpload,
-                              icon: const Icon(Icons.upload),
-                              label: _uploading
-                                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Text('Change photo'),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  builder: (ctx) {
-                                    return Padding(
-                                      padding: EdgeInsets.only(
-                                        left: 16,
-                                        right: 16,
-                                        bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-                                        top: 16,
-                                      ),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Set from URL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                          const SizedBox(height: 12),
-                                          TextField(
-                                            controller: _urlController,
-                                            decoration: const InputDecoration(
-                                              hintText: 'https://example.com/image.jpg',
-                                              border: OutlineInputBorder(),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: ElevatedButton(
-                                              onPressed: _savingUrl
-                                                  ? null
-                                                  : () async {
-                                                      Navigator.pop(ctx);
-                                                      await _saveUrl();
-                                                    },
-                                              child: _savingUrl
-                                                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                                  : const Text('Save'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                              icon: const Icon(Icons.link),
-                              label: const Text('Set from URL'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Profile information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 12),
-                  _infoTile('Name', (_userData?['name'] ?? 'User').toString()),
-                  _infoTile('Phone', (_userData?['phoneNumber'] ?? '').toString()),
-                  if ((_userData?['email'] ?? '') != null && (_userData?['email'] ?? '').toString().isNotEmpty)
-                    _infoTile('Email', (_userData?['email'] ?? '').toString()),
-                  if (_userData?['dateOfBirth'] != null)
-                    _infoTile('Date of birth', _formatDate(_userData?['dateOfBirth'])),
-                  _infoTile('Profile complete', ((_userData?['profileComplete'] ?? false) == true) ? 'Yes' : 'No'),
+      body: Stack(
+        children: [
+          // Modern gradient background
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF8F5FE8),
+                  Color(0xFFE9E4F6),
+                  Color(0xFFF8F9FF),
                 ],
               ),
             ),
+          ),
+          
+          // Content
+          Column(
+            children: [
+              // Modern App Bar
+              _buildModernAppBar(),
+              
+              // Profile Content
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            _buildProfileCard(),
+                            const SizedBox(height: 20),
+                            _buildProfileInfoCard(),
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernAppBar() {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 24,
+        right: 24,
+        bottom: 16,
+      ),
+      child: Row(
+        children: [
+          // Back button
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Title
+          Expanded(
+            child: Text(
+              'Profile Settings',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          // Profile Picture
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 60,
+                backgroundColor: const Color(0xFF8F5FE8).withOpacity(0.1),
+                backgroundImage: (() {
+                  final url = (_userData?['profilePicUrl'] ?? _userData?['profilePic']) as String?;
+                  if (url != null && url.isNotEmpty) {
+                    return NetworkImage(url);
+                  }
+                  return null;
+                })(),
+                child: ((_userData?['profilePicUrl'] ?? _userData?['profilePic']) == null)
+                    ? const Icon(Icons.person, size: 60, color: Color(0xFF8F5FE8))
+                    : null,
+              ),
+              // Edit button overlay
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white, width: 3),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                    onPressed: _showProfilePicOptions,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // User Name
+          Text(
+            (_userData?['name'] ?? 'User').toString(),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF232946),
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Phone Number
+          Text(
+            (_userData?['phoneNumber'] ?? '').toString(),
+            style: const TextStyle(
+              fontSize: 16,
+              color: Color(0xFF777B84),
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.upload,
+                  label: 'Upload Photo',
+                  onPressed: _uploading ? null : _pickAndUpload,
+                  isLoading: _uploading,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.link,
+                  label: 'Set URL',
+                  onPressed: _showUrlDialog,
+                  isLoading: _savingUrl,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF8F5FE8), Color(0xFFB9A6F6)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        icon: isLoading
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon, color: Colors.white, size: 18),
+        label: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileInfoCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Profile Information',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF232946),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildInfoTile('Name', (_userData?['name'] ?? 'User').toString()),
+          _buildInfoTile('Phone', (_userData?['phoneNumber'] ?? '').toString()),
+          if ((_userData?['email'] ?? '') != null && (_userData?['email'] ?? '').toString().isNotEmpty)
+            _buildInfoTile('Email', (_userData?['email'] ?? '').toString()),
+          if (_userData?['dateOfBirth'] != null)
+            _buildInfoTile('Date of birth', _formatDate(_userData?['dateOfBirth'])),
+          _buildInfoTile('Profile complete', ((_userData?['profileComplete'] ?? false) == true) ? 'Yes' : 'No'),
+        ],
+      ),
+    );
+  }
+
+  void _showProfilePicOptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          top: 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Update Profile Picture',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF232946),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    icon: Icons.upload,
+                    label: 'Upload Photo',
+                    onPressed: _uploading ? null : _pickAndUpload,
+                    isLoading: _uploading,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionButton(
+                    icon: Icons.link,
+                    label: 'Set URL',
+                    onPressed: _showUrlDialog,
+                    isLoading: _savingUrl,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showUrlDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          top: 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Set Profile Picture URL',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF232946),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _urlController,
+              decoration: InputDecoration(
+                hintText: 'https://example.com/image.jpg',
+                hintStyle: const TextStyle(color: Color(0xFF777B84)),
+                filled: true,
+                fillColor: const Color(0xFFF6F6F6),
+                contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF8F5FE8), width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: _buildActionButton(
+                icon: Icons.save,
+                label: 'Save URL',
+                onPressed: _savingUrl
+                    ? null
+                    : () async {
+                        Navigator.pop(ctx);
+                        await _saveUrl();
+                      },
+                isLoading: _savingUrl,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _infoTile(String label, String value) {
-    return Card(
-      elevation: 0,
-      color: const Color(0xFFF6F4FB),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(value.isEmpty ? '-' : value),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF8F5FE8).withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF777B84),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value.isEmpty ? '-' : value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF232946),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.info_outline,
+            color: const Color(0xFF8F5FE8).withOpacity(0.6),
+            size: 20,
+          ),
+        ],
       ),
     );
   }

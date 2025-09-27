@@ -174,20 +174,21 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
     setState(() => _sharingLocation = true);
     
     try {
-      print('🚀 [SHARE LOCATION] Starting location sharing process');
+      print('[SHARE LOCATION] Starting location sharing process');
       
-      // Step 1: Get current location
-      final locationData = await LocationService.getCurrentLocation();
+      // Step 1: Get current location with timeout
+      final locationData = await LocationService.getCurrentLocation()
+          .timeout(const Duration(seconds: 10));
       if (locationData == null) {
         throw Exception('Unable to get current location. Please check location permissions.');
       }
       
-      print('📍 [SHARE LOCATION] Current location: ${locationData.latitude}, ${locationData.longitude}');
+      print('[SHARE LOCATION] Current location: ${locationData.latitude}, ${locationData.longitude}');
       
       // Step 2: Generate client ID
       final clientId = LocationService.generateClientId();
       
-      print('📱 [SHARE LOCATION] Client ID: $clientId');
+      print('[SHARE LOCATION] Client ID: $clientId');
       
       // Step 3: Get user phone number
       final usersQuery = await FirebaseFirestore.instance
@@ -204,7 +205,7 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
       final userData = userDoc.data();
       final phoneNumber = userData['phoneNumber'] ?? 'tel:+94712345678'; // Fallback
       
-      print('📞 [SHARE LOCATION] Phone Number: $phoneNumber');
+      print('[SHARE LOCATION] Phone Number: $phoneNumber');
       
       // Step 4: Start backend location sharing session
       final backendResponse = await LocationService.startLocationSharing(
@@ -217,16 +218,16 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
           'duration': _selectedDuration,
           'flutterApp': true,
         },
-      );
+      ).timeout(const Duration(seconds: 15));
       
       if (!backendResponse.success) {
         throw Exception('Backend error: ${backendResponse.message}');
       }
       
       _sessionId = backendResponse.sessionId;
-      print('✅ [SHARE LOCATION] Backend session started: $_sessionId');
+      print('[SHARE LOCATION] Backend session started: $_sessionId');
       
-      // Step 6: Convert contact IDs to user IDs and send notifications
+      // Step 5: Convert contact IDs to user IDs and send notifications
       final fromName = (userData['name'] ?? 'Someone').toString();
       final fromId = userDoc.id;
       final contactsCol = FirebaseFirestore.instance.collection('users');
@@ -262,7 +263,7 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
                 formattedPhone = 'tel:94$contactPhone';
               }
               
-              print('🔍 [SHARE LOCATION] Looking up user with formatted phone: $formattedPhone');
+              print('[SHARE LOCATION] Looking up user with formatted phone: $formattedPhone');
               
               // Find user by phone number
               final userQuery = await FirebaseFirestore.instance
@@ -287,11 +288,11 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
                   'createdAt': FieldValue.serverTimestamp(),
                   'read': false,
                 });
-                print('📨 [SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
+                print('[SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
               } else {
                 // Try finding by document ID (user ID might be the phone number without tel: prefix)
                 final phoneWithoutTel = formattedPhone.replaceAll('tel:', '');
-                print('🔍 [SHARE LOCATION] Trying to find user by document ID: $phoneWithoutTel');
+                print('[SHARE LOCATION] Trying to find user by document ID: $phoneWithoutTel');
                 
                 final userDoc = await FirebaseFirestore.instance
                     .collection('users')
@@ -299,7 +300,7 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
                     .get();
                 
                 if (userDoc.exists) {
-                  print('✅ [SHARE LOCATION] Found user by document ID: $phoneWithoutTel');
+                  print('[SHARE LOCATION] Found user by document ID: $phoneWithoutTel');
                   final targetUserId = userDoc.id;
                   actualUserIds.add(targetUserId);
                   
@@ -315,15 +316,15 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
                     'createdAt': FieldValue.serverTimestamp(),
                     'read': false,
                   });
-                  print('📨 [SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
+                  print('[SHARE LOCATION] Notification sent to user: $targetUserId (phone: $contactPhone)');
                 } else {
-                  print('⚠️ [SHARE LOCATION] No user found for phone: $contactPhone');
+                  print('[SHARE LOCATION] No user found for phone: $contactPhone');
                 }
               }
             }
           }
         } catch (e) {
-          print('❌ [SHARE LOCATION] Failed to process contact $contactId: $e');
+          print('[SHARE LOCATION] Failed to process contact $contactId: $e');
         }
       }
       
@@ -344,59 +345,52 @@ class _ShareLocationSheetContentState extends State<_ShareLocationSheetContent> 
         },
       }, SetOptions(merge: true));
       
-      print('✅ [SHARE LOCATION] Firebase updated with shareLocationContacts: $actualUserIds');
+      print('[SHARE LOCATION] Firebase updated with shareLocationContacts: $actualUserIds');
+      print('[SHARE LOCATION] Location sharing started successfully');
       
-      print('✅ [SHARE LOCATION] Firebase updated with sharing status');
-      
-      print('✅ [SHARE LOCATION] Location sharing started successfully');
-      
-      // Step 7: Start native background location tracking AFTER Firebase update
+      // Step 6: Start native background location tracking AFTER Firebase update
       // Add a small delay to ensure Firebase update is propagated
       await Future.delayed(const Duration(milliseconds: 500));
       
       try {
         final trackingStarted = await NativeBackgroundLocationService.startTracking(sessionId: _sessionId);
         if (trackingStarted) {
-          print('✅ [SHARE LOCATION] Native background location tracking started');
+          print('[SHARE LOCATION] Native background location tracking started');
         } else {
-          print('⚠️ [SHARE LOCATION] Background tracking failed to start - user may not be sharing');
+          print('[SHARE LOCATION] Background tracking failed to start - user may not be sharing');
         }
       } catch (e) {
-        print('❌ [SHARE LOCATION] Failed to start native background tracking: $e');
+        print('[SHARE LOCATION] Failed to start native background tracking: $e');
       }
       
-      // Show success message
+      // Show success message and close immediately
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Location sharing started with ${_selectedContactIds.length} contact(s)'),
             backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'Test Updates',
-              textColor: Colors.white,
-              onPressed: () {
-                NativeBackgroundLocationService.forceMultipleLocationUpdates();
-              },
-            ),
+            duration: const Duration(seconds: 2),
           ),
         );
+        Navigator.pop(context);
       }
       
     } catch (e) {
-      print('❌ [SHARE LOCATION] Error starting location sharing: $e');
+      print('[SHARE LOCATION] Error starting location sharing: $e');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to start location sharing: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
     
+    // Always reset loading state
     if (mounted) {
-      Navigator.pop(context);
       setState(() => _sharingLocation = false);
     }
   }

@@ -35,50 +35,48 @@ const MSPACE_CONFIG = {
   applicationHash: process.env.MSPACE_APPLICATION_HASH
 };
 
-// Phone number mapping for mspace (same as OTP)
-const PHONE_TO_CLIENT_ID_MAPPING = {
-  'tel:94714555151': '94714555151',
-  'tel:94712345678': '94712345678',
-  'tel:94776543210': '94776543210',
-  'tel:94701234567': '94701234567',
-  'tel:94787654321': '94787654321',
-  'tel:94723456789': '94723456789',
-  'tel:94734567890': '94734567890',
-  'tel:94745678901': '94745678901',
-  'tel:94756789012': '94756789012',
-  'tel:94767890123': '94767890123',
-  'tel:94778901234': '94778901234',
-  'tel:94789012345': '94789012345',
-  'tel:94790123456': '94790123456',
-  'tel:94702315301': '94702315301',
-  'tel:94712345678': '94712345678',
-  'tel:94723456789': '94723456789',
-  'tel:94734567890': '94734567890',
-  'tel:94745678901': '94745678901',
-  'tel:94756789012': '94756789012',
-  'tel:94767890123': '94767890123',
-  'tel:94778901234': '94778901234',
-  'tel:94789012345': '94789012345',
-  'tel:94790123456': '94790123456',
-  'tel:94701234567': '94701234567',
-  'tel:94711111111': '94711111111',
-  'tel:94722222222': '94722222222',
-  'tel:94733333333': '94733333333',
-  'tel:94744444444': '94744444444',
-  'tel:94755555555': '94755555555',
-  'tel:94766666666': '94766666666',
-  'tel:94777777777': '94777777777',
-  'tel:94788888888': '94788888888',
-  'tel:94799999999': '94799999999',
-  'tel:94700000000': '94700000000'
-};
+// Note: Client ID mappings are now stored in Firebase 'client_mappings' collection
+// This provides better flexibility and allows dynamic registration of new phone numbers
+
+// Function to get readable address from coordinates using reverse geocoding
+async function getAddressFromCoordinates(latitude, longitude) {
+  try {
+    // Using OpenStreetMap Nominatim service (free, no API key required)
+    const response = await axios.get(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'User-Agent': 'SafeStep-Emergency-Alert/1.0'
+        },
+        timeout: 5000
+      }
+    );
+    
+    if (response.data && response.data.display_name) {
+      // Extract the most relevant parts of the address
+      const address = response.data.display_name;
+      const addressParts = address.split(', ');
+      
+      // Take first 3-4 parts for a concise address
+      const shortAddress = addressParts.slice(0, 4).join(', ');
+      
+      console.log(`[EMERGENCY ALERT] Reverse geocoded address: ${shortAddress}`);
+      return shortAddress;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`[EMERGENCY ALERT] Reverse geocoding failed:`, error.message);
+    return null;
+  }
+}
 
 // POST /api/emergency/alert - Send emergency alert to close contacts
 router.post('/alert', async (req, res) => {
   const endpoint = '/api/emergency/alert';
   
   try {
-    console.log(`🚨 [EMERGENCY ALERT] Starting emergency alert process`);
+    console.log(`[EMERGENCY ALERT] Starting emergency alert process`);
     
     const { userId, userName, latitude, longitude, timestamp } = req.body;
     
@@ -91,11 +89,23 @@ router.post('/alert', async (req, res) => {
       });
     }
     
-    console.log(`🚨 [EMERGENCY ALERT] Alert for user: ${userName} (${userId})`);
-    console.log(`📍 [EMERGENCY ALERT] Location: ${latitude}, ${longitude}`);
+    console.log(`[EMERGENCY ALERT] Alert for user: ${userName} (${userId})`);
+    console.log(`[EMERGENCY ALERT] Location: ${latitude}, ${longitude}`);
+    
+    // Get user's actual name from Firebase
+    const db = getFirestore();
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    let actualUserName = userName; // Use provided name as fallback
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      actualUserName = userData.name || userData.userName || userData.displayName || userName;
+      console.log(`[EMERGENCY ALERT] Fetched user name from Firebase: ${actualUserName}`);
+    } else {
+      console.log(`[EMERGENCY ALERT] User document not found, using provided name: ${userName}`);
+    }
     
     // Get user's close contacts
-    const db = getFirestore();
     const contactsSnapshot = await db
       .collection('users')
       .doc(userId)
@@ -103,7 +113,7 @@ router.post('/alert', async (req, res) => {
       .get();
     
     if (contactsSnapshot.empty) {
-      console.log(`⚠️ [EMERGENCY ALERT] No close contacts found for user ${userId}`);
+      console.log(`[EMERGENCY ALERT] No close contacts found for user ${userId}`);
       return res.status(404).json({
         error: 'No close contacts found',
         code: 'NO_CONTACTS',
@@ -116,7 +126,7 @@ router.post('/alert', async (req, res) => {
       ...doc.data()
     }));
     
-    console.log(`📞 [EMERGENCY ALERT] Found ${contacts.length} close contacts`);
+    console.log(`[EMERGENCY ALERT] Found ${contacts.length} close contacts`);
     
     // Get user's current location info for Google Maps link
     const currentTime = new Date().toLocaleString('en-US', {
@@ -129,23 +139,29 @@ router.post('/alert', async (req, res) => {
       second: '2-digit'
     });
     
+    // Get readable address from coordinates
+    console.log(`[EMERGENCY ALERT] Getting address for coordinates: ${latitude}, ${longitude}`);
+    const readableAddress = await getAddressFromCoordinates(latitude, longitude);
+    
     // Create Google Maps link
     const googleMapsLink = `https://maps.google.com/maps?q=${latitude},${longitude}`;
     
+    // Prepare location text (use address if available, fallback to coordinates)
+    const locationText = readableAddress || `${latitude}, ${longitude}`;
+    
     // Prepare emergency message
-    const emergencyMessage = `🚨 EMERGENCY ALERT from SafeStep 🚨
+    const emergencyMessage = `EMERGENCY : ${actualUserName} needs immediate help
 
-${userName} needs immediate assistance!
+User: ${actualUserName}
+Location: ${locationText}
+Time: ${currentTime}
+View on Google Maps: ${googleMapsLink}
 
-📍 Location: ${latitude}, ${longitude}
-🕐 Time: ${currentTime}
-🗺️ View on Google Maps: ${googleMapsLink}
-
-This is an automated emergency alert. Please check on ${userName} immediately.
+This is an automated emergency alert. Please check on ${actualUserName} immediately.
 
 Stay Safe with SafeStep`;
 
-    console.log(`📱 [EMERGENCY ALERT] Prepared message for ${contacts.length} contacts`);
+    console.log(`[EMERGENCY ALERT] Prepared message for ${contacts.length} contacts`);
     
     // Send SMS to each contact
     const results = [];
@@ -155,33 +171,51 @@ Stay Safe with SafeStep`;
     for (const contact of contacts) {
       try {
         const contactPhone = contact.phone;
-        console.log(`📤 [EMERGENCY ALERT] Sending to ${contact.name} (${contactPhone})`);
+        console.log(`[EMERGENCY ALERT] Sending to ${contact.name} (${contactPhone})`);
         
-        // Format phone number
+        // Format phone number with improved validation
         let formattedPhone;
         if (contactPhone.startsWith('tel:')) {
           formattedPhone = contactPhone;
         } else if (contactPhone.startsWith('0')) {
+          // Sri Lankan format: 0714555151 -> tel:94714555151
           formattedPhone = `tel:94${contactPhone.substring(1)}`;
         } else if (contactPhone.startsWith('94')) {
+          // Already has country code: 94714555151 -> tel:94714555151
           formattedPhone = `tel:${contactPhone}`;
         } else {
+          // Assume local number: 714555151 -> tel:94714555151
           formattedPhone = `tel:94${contactPhone}`;
         }
         
-        // Get client ID for mspace
-        const clientId = PHONE_TO_CLIENT_ID_MAPPING[formattedPhone];
-        if (!clientId) {
-          console.log(`⚠️ [EMERGENCY ALERT] No client ID mapping for ${formattedPhone}`);
+        console.log(`[EMERGENCY ALERT] Formatted phone: ${contactPhone} -> ${formattedPhone}`);
+        
+        // Get client ID from Firebase client mappings (same as OTP service)
+        const db = getFirestore();
+        const clientQuery = await db.collection('client_mappings')
+          .where('phoneNumber', '==', formattedPhone)
+          .where('isActive', '==', true)
+          .limit(1)
+          .get();
+        
+        if (clientQuery.empty) {
+          console.log(`[EMERGENCY ALERT] No client mapping found for ${formattedPhone}`);
+          console.log(`[EMERGENCY ALERT] Please register this phone number using /api/otp/register-client`);
           results.push({
             contact: contact.name,
             phone: contactPhone,
+            formattedPhone: formattedPhone,
             status: 'failed',
-            error: 'No client ID mapping'
+            error: `No client mapping found for ${formattedPhone}. Please register this phone number first.`
           });
           failureCount++;
           continue;
         }
+        
+        const clientData = clientQuery.docs[0].data();
+        const clientId = clientData.clientId;
+        
+        console.log(`[EMERGENCY ALERT] Found client ID for ${formattedPhone}: ${clientId}`);
         
         // Prepare mspace SMS request
         const mspaceSMSRequest = {
@@ -194,7 +228,8 @@ Stay Safe with SafeStep`;
           encoding: "0"
         };
         
-        console.log(`📤 [EMERGENCY ALERT] Sending SMS via mspace to ${clientId}`);
+        console.log(`[EMERGENCY ALERT] Sending SMS via mspace to ${clientId}`);
+        console.log(`[EMERGENCY ALERT] SMS Request:`, JSON.stringify(mspaceSMSRequest, null, 2));
         
         // Call mspace SMS API
         const mspaceResponse = await axios.post(
@@ -211,7 +246,7 @@ Stay Safe with SafeStep`;
         
         // Check mspace response
         if (mspaceResponse.data && mspaceResponse.data.statusCode === 'S1000') {
-          console.log(`✅ [EMERGENCY ALERT] SMS sent successfully to ${contact.name}`);
+          console.log(`[EMERGENCY ALERT] SMS sent successfully to ${contact.name}`);
           results.push({
             contact: contact.name,
             phone: contactPhone,
@@ -220,7 +255,7 @@ Stay Safe with SafeStep`;
           });
           successCount++;
         } else {
-          console.log(`❌ [EMERGENCY ALERT] SMS failed for ${contact.name}:`, mspaceResponse.data);
+          console.log(`[EMERGENCY ALERT] SMS failed for ${contact.name}:`, mspaceResponse.data);
           results.push({
             contact: contact.name,
             phone: contactPhone,
@@ -231,7 +266,7 @@ Stay Safe with SafeStep`;
         }
         
       } catch (error) {
-        console.error(`❌ [EMERGENCY ALERT] Error sending to ${contact.name}:`, error.message);
+        console.error(`[EMERGENCY ALERT] Error sending to ${contact.name}:`, error.message);
         results.push({
           contact: contact.name,
           phone: contact.phone,
@@ -245,9 +280,12 @@ Stay Safe with SafeStep`;
     // Log emergency alert to Firebase
     await db.collection('emergency_alerts').add({
       userId: userId,
-      userName: userName,
+      userName: actualUserName,
+      originalUserName: userName, // Keep original for reference
       latitude: latitude,
       longitude: longitude,
+      readableAddress: readableAddress,
+      locationText: locationText,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       contactsAlerted: contacts.length,
       successCount: successCount,
@@ -256,23 +294,28 @@ Stay Safe with SafeStep`;
       googleMapsLink: googleMapsLink
     });
     
-    console.log(`📊 [EMERGENCY ALERT] Summary: ${successCount} success, ${failureCount} failed`);
+    console.log(`[EMERGENCY ALERT] Summary: ${successCount} success, ${failureCount} failed`);
     
     res.json({
       success: true,
       message: 'Emergency alert sent to close contacts',
       data: {
+        userId: userId,
+        userName: actualUserName,
+        originalUserName: userName,
         totalContacts: contacts.length,
         successCount: successCount,
         failureCount: failureCount,
         results: results,
+        locationText: locationText,
+        readableAddress: readableAddress,
         googleMapsLink: googleMapsLink,
         timestamp: new Date().toISOString()
       }
     });
     
   } catch (error) {
-    console.error(`❌ [EMERGENCY ALERT] Global error:`, error);
+    console.error(`[EMERGENCY ALERT] Global error:`, error);
     res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
