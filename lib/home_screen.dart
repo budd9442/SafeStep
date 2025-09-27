@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // bool _showMap = false; // No longer needed, always show map
+  bool _featureOpen = false;
   LatLng? _currentPosition;
   bool _loading = true;
   String? _error;

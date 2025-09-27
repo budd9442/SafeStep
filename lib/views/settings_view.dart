@@ -86,7 +86,7 @@ class _SettingsTile extends StatelessWidget {
         onTap: () {
           if (label == 'Profile settings') {
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const _ProfileSettingsRouteProxy()),
+              MaterialPageRoute(builder: (_) => const ProfileSettingsRouteProxy()),
             );
           } else if (label == 'AI Assistant Settings') {
             Navigator.of(context).push(

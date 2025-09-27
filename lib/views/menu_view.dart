@@ -135,15 +135,7 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                                       letterSpacing: -0.5,
                                     ),
                                   ),
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    'Choose your safety feature',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: Color(0xFF6B7280),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                                  
                                 ],
                               ),
                             ),
@@ -154,16 +146,10 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                   ),
                 ),
                 
-                // Emergency Features Section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: _buildSectionHeader('Emergency Features', Icons.emergency),
-                  ),
-                ),
+                
                 
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                   sliver: SliverGrid(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -197,13 +183,7 @@ class _MenuViewState extends State<MenuView> with TickerProviderStateMixin {
                   ),
                 ),
 
-                // Communication Section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                    child: _buildSectionHeader('Communication', Icons.message),
-                  ),
-                ),
+                
                 
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -355,20 +335,7 @@ class _ModernMenuCardState extends State<_ModernMenuCard>
                 onTapCancel: () => _controller.reverse(),
                 child: Stack(
                   children: [
-                    // Background image with transparency
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Opacity(
-                        opacity: 0.18,
-                        child: Image.asset(
-                          'assets/card_bg.png',
-                          width: 68,
-                          height: 68,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
+                   
                     Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
