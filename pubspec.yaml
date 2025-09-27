@@ -107,6 +107,8 @@ flutter:
     - assets/SafeStep.png
     - assets/call.png
     - assets/chat.jpg
+    - assets/screen2.png
+    - assets/screen3.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

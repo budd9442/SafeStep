@@ -162,12 +162,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             "Your personal safety companion, designed for the unique needs of Sri Lankan women.",
       },
       {
-        'image': 'assets/screen.png',
+        'image': 'assets/screen2.png',
         'title': "Your Personal Safety Companion",
         'subtitle': "Emergency alerts, real-time location sharing, and safety checks at your fingertips.",
       },
       {
-        'image': 'assets/screen.png',
+        'image': 'assets/screen3.png',
         'title': "Stay Fearless, Live Free",
         'subtitle': "SafeStep empowers you to live confidently and securely, wherever you go.",
       },
