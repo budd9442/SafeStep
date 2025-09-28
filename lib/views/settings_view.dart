@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
 import 'package:safestep/views/map_view.dart';
 import 'package:safestep/services/local_session.dart';
 import 'ai_personalization_screen.dart';
@@ -11,6 +8,7 @@ import 'package:safestep/views/privacy_settings_view.dart';
 import 'package:safestep/views/notifications_settings_view.dart';
 import 'package:safestep/views/language_settings_view.dart';
 import 'package:safestep/views/help_support_view.dart';
+import 'package:safestep/views/auth/phone_auth_screen.dart';
 
 class SettingsView extends StatelessWidget {
   final ValueChanged<String>? onProfilePicChanged;
@@ -47,6 +45,12 @@ class SettingsView extends StatelessWidget {
             icon: Icons.smart_toy,
             label: 'AI Assistant Settings',
           ),
+          const SizedBox(height: 24),
+          _SettingsTile(
+            icon: Icons.delete_forever,
+            label: 'Delete Account',
+            isDestructive: true,
+          ),
         ],
       ),
     );
@@ -56,7 +60,8 @@ class SettingsView extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _SettingsTile({required this.icon, required this.label});
+  final bool isDestructive;
+  const _SettingsTile({required this.icon, required this.label, this.isDestructive = false});
 
   @override
   Widget build(BuildContext context) {
@@ -69,21 +74,27 @@ class _SettingsTile extends StatelessWidget {
         leading: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF8F5FE8), Color(0xFF6C63FF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: isDestructive 
+                ? const LinearGradient(
+                    colors: [Colors.red, Color(0xFFD32F2F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : const LinearGradient(
+                    colors: [Color(0xFF8F5FE8), Color(0xFF6C63FF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
           ),
           padding: const EdgeInsets.all(10),
           child: Icon(icon, color: Colors.white, size: 26),
         ),
         title: Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 17,
-            color: Color(0xFF232946),
+            color: isDestructive ? Colors.red : const Color(0xFF232946),
           ),
         ),
         trailing: const Icon(Icons.arrow_forward_ios, color: Color(0xFF8F5FE8), size: 18),
@@ -112,10 +123,156 @@ class _SettingsTile extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HelpSupportView()),
             );
+          } else if (label == 'Delete Account') {
+            _showDeleteAccountDialog(context);
           }
         },
       ),
     );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'Delete Account',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to permanently delete your account? This action cannot be undone and will remove all your data from SafeStep.',
+            style: TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Color(0xFF8F5FE8)),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _deleteAccount(context);
+              },
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    // Store context reference to avoid widget lifecycle issues
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Deleting account...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Get current user ID (phone number format like 94714555151)
+      final userId = await LocalSession.getCurrentUserId();
+      print('🗑️ [DELETE ACCOUNT] Starting account deletion for user ID: $userId');
+      
+      if (userId == null) {
+        print('❌ [DELETE ACCOUNT] No user ID found in local session');
+        throw Exception('No user ID found');
+      }
+
+      // Delete user data from Firestore using phone number as document ID
+      print('🗑️ [DELETE ACCOUNT] Deleting user document: users/$userId');
+      await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+      print('✅ [DELETE ACCOUNT] User document deleted successfully');
+
+      // Delete user's subcollections
+      final batch = FirebaseFirestore.instance.batch();
+      
+      // Delete contacts
+      print('🗑️ [DELETE ACCOUNT] Fetching contacts subcollection');
+      final contactsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('contacts')
+          .get();
+      
+      print('🗑️ [DELETE ACCOUNT] Found ${contactsSnapshot.docs.length} contacts to delete');
+      for (final doc in contactsSnapshot.docs) {
+        print('🗑️ [DELETE ACCOUNT] Deleting contact: ${doc.id}');
+        batch.delete(doc.reference);
+      }
+
+      // Note: Profile pictures in Storage are not deleted to avoid permission issues
+      print('ℹ️ [DELETE ACCOUNT] Skipping profile picture deletion (using URL only)');
+
+      // Commit batch
+      print('🗑️ [DELETE ACCOUNT] Committing batch deletion');
+      await batch.commit();
+      print('✅ [DELETE ACCOUNT] Batch deletion completed successfully');
+
+      // Clear local session
+      print('🗑️ [DELETE ACCOUNT] Clearing local session');
+      await LocalSession.clear();
+      print('✅ [DELETE ACCOUNT] Local session cleared');
+
+      // Close loading dialog
+      print('🗑️ [DELETE ACCOUNT] Closing loading dialog');
+      navigator.pop();
+
+      // Show success message
+      print('✅ [DELETE ACCOUNT] Showing success message');
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Account deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Navigate to auth screen
+      print('🗑️ [DELETE ACCOUNT] Navigating to auth screen');
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const PhoneAuthScreen()),
+        (route) => false,
+      );
+      print('✅ [DELETE ACCOUNT] Account deletion completed successfully');
+
+    } catch (e) {
+      // Close loading dialog
+      print('❌ [DELETE ACCOUNT] Error occurred, closing loading dialog');
+      navigator.pop();
+      
+      // Show error message
+      print('❌ [DELETE ACCOUNT] Error: $e');
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete account: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
@@ -169,9 +326,7 @@ class _ProfileSettingsScaffold extends StatelessWidget {
 }
 
 class _ProfilePictureTile extends StatefulWidget {
-  final ValueChanged<String>? onProfilePicChanged;
-  final GlobalKey<MapViewState>? mapViewKey;
-  const _ProfilePictureTile({Key? key, this.onProfilePicChanged, this.mapViewKey}) : super(key: key);
+  const _ProfilePictureTile({Key? key}) : super(key: key);
 
   @override
   State<_ProfilePictureTile> createState() => _ProfilePictureTileState();
@@ -185,42 +340,9 @@ class _ProfilePictureTileState extends State<_ProfilePictureTile> {
   Future<void> _pickAndUpload() async {
     setState(() => _uploading = true);
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-
-        // Use local session user ID
-        final localUserId = await LocalSession.getCurrentUserId();
-        if (localUserId != null && localUserId.isNotEmpty) {
-          final userId = localUserId;
-
-          final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/$userId.jpg');
-          await ref.putFile(file);
-          // Wait a moment for CDN to update
-          await Future.delayed(const Duration(milliseconds: 500));
-          // Get a fresh download URL and random cache-buster
-          final newUrl = await ref.getDownloadURL();
-          final cacheBuster = DateTime.now().millisecondsSinceEpoch.toString() + '_' + (DateTime.now().microsecondsSinceEpoch % 1000).toString();
-          final finalUrl = '$newUrl?cb=$cacheBuster';
-
-          // Save the profile picture URL to Firestore
-          await FirebaseFirestore.instance.collection('users').doc(userId).set({
-            'profilePicUrl': finalUrl,
-            'profilePic': finalUrl, // Keep both fields for backward compatibility
-          }, SetOptions(merge: true));
-
-          setState(() {
-            // This will force FutureBuilder to refetch
-            _profilePicFuture = Future.value(finalUrl);
-          });
-          PaintingBinding.instance.imageCache.clear();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated!')));
-          if (widget.mapViewKey?.currentState != null) {
-            await widget.mapViewKey!.currentState!.refreshProfilePointerMarker();
-          }
-          if (widget.onProfilePicChanged != null) widget.onProfilePicChanged!(file.path);
-        }
-      }
+      // Profile picture upload disabled - use URL only
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture upload disabled - use URL only')));
+      return;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload: $e')));
     } finally {
@@ -258,9 +380,7 @@ class _ProfilePictureTileState extends State<_ProfilePictureTile> {
         });
         PaintingBinding.instance.imageCache.clear();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture URL saved!')));
-        if (widget.mapViewKey?.currentState != null) {
-          await widget.mapViewKey!.currentState!.refreshProfilePointerMarker();
-        }
+        // Profile picture URL saved successfully
         _urlController.clear();
       }
     } catch (e) {
@@ -335,17 +455,13 @@ class _ProfilePictureTileState extends State<_ProfilePictureTile> {
           // It's already a URL, return it with cache-busting
           return '$profilePicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
         } else {
-          // It's a Firebase Storage path, get the download URL
-          final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child(profilePicUrl);
-          final url = await ref.getDownloadURL();
-          return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
+          // It's a Firebase Storage path, but we don't use buckets anymore
+          return null;
         }
       }
 
-      // Fallback to Firebase Storage with user ID
-      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/${userDoc.id}.jpg');
-      final url = await ref.getDownloadURL();
-      return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
+      // No fallback to Firebase Storage - use URL only
+      return null;
     } catch (_) {
       return null;
     }

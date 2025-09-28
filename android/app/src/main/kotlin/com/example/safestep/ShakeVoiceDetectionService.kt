@@ -65,7 +65,7 @@ class ShakeDetectionService : Service(), SensorEventListener {
                     sensorManager.unregisterListener(listener)
                     Log.d("ShakeDetectionService", "Gesture recording finished, maxDelta=$maxDelta")
                     callback(maxDelta, null)
-                }, 10000)
+                }, 7000)
             } catch (e: Exception) {
                 Log.e("ShakeDetectionService", "Error recording gesture: ${e.message}")
                 callback(null, "Error recording gesture: ${e.message}")

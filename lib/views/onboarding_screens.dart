@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:safestep/views/auth/user_details_form_screen.dart';
+import 'package:safestep/home_screen.dart';
 
 class OnboardingPageContent extends StatelessWidget {
   final String imagePath;
@@ -141,12 +141,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => UserDetailsFormScreen(
-          phoneNumber: widget.phoneNumber,
-          onComplete: () {
-            if (mounted) widget.onAuthSuccess?.call();
-          },
-        ),
+        builder: (context) => const HomeScreen(),
       ),
       (route) => false,
     );

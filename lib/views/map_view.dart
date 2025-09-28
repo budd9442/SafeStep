@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -143,17 +142,13 @@ class MapViewState extends State<MapView> {
           // It's already a URL, return it with cache-busting to prevent caching
           return '$profilePicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
         } else {
-          // It's a Firebase Storage path, get the download URL with cache-busting
-          final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child(profilePicUrl);
-          final url = await ref.getDownloadURL();
-          return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
+          // It's a Firebase Storage path, but we don't use Storage anymore
+          return null;
         }
       }
 
-      // Fallback to Firebase Storage with user ID - no caching
-      final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app').ref().child('profile_pics/$localUserId.jpg');
-      final url = await ref.getDownloadURL();
-      return '$url?t=${DateTime.now().millisecondsSinceEpoch}';
+      // No fallback to Firebase Storage - use URL only
+      return null;
     } catch (e) {
       print('Error fetching profile pic: $e');
       return null;
@@ -453,6 +448,56 @@ class MapViewState extends State<MapView> {
                   }
                 },
                 child: const Icon(Icons.my_location, color: Color(0xFF8F5FE8)),
+              ),
+            ),
+          // Profile bubble for shared location users
+          if (widget.sharedLocations != null && widget.sharedLocations!.isNotEmpty)
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                        ),
+                        child: const Icon(
+                          Icons.location_on,
+                          color: Color(0xFF8F5FE8),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${widget.sharedLocations!.length} user${widget.sharedLocations!.length > 1 ? 's' : ''} sharing location',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF232946),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
         ],

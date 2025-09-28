@@ -1,8 +1,4 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:safestep/services/local_session.dart';
@@ -86,38 +82,10 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
   }
 
   Future<void> _pickAndUpload() async {
-    setState(() => _uploading = true);
-    try {
-      if (_userId == null) return;
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        final ref = FirebaseStorage.instanceFor(bucket: 'gs://safestep-d8237.firebasestorage.app')
-            .ref()
-            .child('profile_pics/${_userId}.jpg');
-        await ref.putFile(file);
-        await Future.delayed(const Duration(milliseconds: 500));
-        final newUrl = await ref.getDownloadURL();
-        final cacheBuster = DateTime.now().millisecondsSinceEpoch.toString();
-        final finalUrl = '$newUrl?cb=$cacheBuster';
-
-        await FirebaseFirestore.instance.collection('users').doc(_userId).set({
-          'profilePicUrl': finalUrl,
-          'profilePic': finalUrl,
-        }, SetOptions(merge: true));
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated')));
-          await _loadProfile();
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _uploading = false);
-    }
+    // Profile picture upload disabled - use URL only
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile picture upload disabled - use URL only')),
+    );
   }
 
   Future<void> _saveUrl() async {
@@ -560,54 +528,6 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _infoTile(String label, String value) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF8F5FE8).withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF777B84),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value.isEmpty ? '-' : value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF232946),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.info_outline,
-            color: const Color(0xFF8F5FE8).withOpacity(0.6),
-            size: 20,
-          ),
-        ],
       ),
     );
   }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:safestep/home_screen.dart';
 import 'package:safestep/views/auth/user_details_form_screen.dart';
-import 'package:safestep/views/onboarding_screens.dart';
 import '../../services/otp_service.dart';
 import '../../services/local_session.dart';
 
@@ -214,19 +213,53 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     if (verifyResponse.success) {
       final phoneNumber = verifyResponse.phoneNumber!;
+      print('🔍 [AUTH] OTP verified successfully for phone: $phoneNumber');
 
+      print('🔍 [AUTH] Checking if user exists for phone: $phoneNumber');
       final userExistsResponse = await OTPService.checkUserExists(phoneNumber);
+      print('🔍 [AUTH] User exists check result: success=${userExistsResponse.success}, userData=${userExistsResponse.userData}');
 
       if (userExistsResponse.success) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomeScreen(),
-            ),
-          );
+        // User exists - check if profile is complete
+        final userData = userExistsResponse.userData;
+        final profileComplete = userData?['profileComplete'] ?? false;
+        
+        print('✅ [AUTH] User exists, profileComplete: $profileComplete');
+        
+        if (profileComplete) {
+          // Profile is complete - create session and navigate to home
+          print('✅ [AUTH] Profile is complete, creating session and navigating to home');
+          await _createCustomUserSession(phoneNumber, userData);
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HomeScreen(),
+              ),
+            );
+          }
+        } else {
+          // Profile is incomplete - navigate to profile completion
+          print('👤 [AUTH] Profile is incomplete, navigating to profile completion');
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UserDetailsFormScreen(
+                  phoneNumber: phoneNumber,
+                  onComplete: () {
+                    if (mounted) {
+                      widget.onAuthSuccess?.call();
+                    }
+                  },
+                ),
+              ),
+            );
+          }
         }
       } else {
+        // User doesn't exist - navigate to details form
+        print('👤 [AUTH] User does not exist, navigating to user details form');
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -310,26 +343,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 }*/
 
 
-  Future<void> _loginExistingUser(String phoneNumber, Map<String, dynamic>? userData) async {
-    try {
-      print('🔐 Logging in existing user: $phoneNumber');
-      print('📋 User data: $userData');
-      
-      // Instead of Firebase Auth, we'll create a custom user session
-      // Store user data locally and mark as authenticated
-      await _createCustomUserSession(phoneNumber, userData);
-      
-      print('✅ Existing user logged in successfully');
-      
-    } catch (e) {
-      print('❌ Error logging in existing user: $e');
-      rethrow;
-    }
-  }
 
   Future<void> _createCustomUserSession(String phoneNumber, Map<String, dynamic>? userData) async {
     try {
-      print('💾 Creating custom user session for: $phoneNumber');
+      print('💾 [AUTH] Creating custom user session for: $phoneNumber');
+      print('💾 [AUTH] User data received: $userData');
       
       // Create user document in Firestore without Firebase Auth
       final sessionData = {
@@ -348,17 +366,21 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       // Remove null values
       sessionData.removeWhere((key, value) => value == null);
       
-      print('📝 Session data to save: $sessionData');
+      print('📝 [AUTH] Session data to save: $sessionData');
       
       // Store in Firestore with a custom document ID
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(phoneNumber.replaceAll(RegExp(r'[^\d]'), ''));
+      final cleanPhoneNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+      print('📝 [AUTH] Using clean phone number as document ID: $cleanPhoneNumber');
+      
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(cleanPhoneNumber);
       await userDoc.set(sessionData, SetOptions(merge: true));
       
-      print('✅ User session created successfully in Firestore');
+      print('✅ [AUTH] User session created successfully in Firestore with ID: ${userDoc.id}');
       await LocalSession.setCurrentUserId(userDoc.id);
+      print('✅ [AUTH] Local session set with user ID: ${userDoc.id}');
       
     } catch (e) {
-      print('❌ Error creating user session: $e');
+      print('❌ [AUTH] Error creating user session: $e');
       rethrow;
     }
   }

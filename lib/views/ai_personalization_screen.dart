@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as path;
 import 'dart:io';
 import '../services/local_session.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -113,14 +111,8 @@ class _AIPersonalizationScreenState extends State<AIPersonalizationScreen> {
       final localUserId = await LocalSession.getCurrentUserId();
       if (localUserId == null) return null;
 
-      final fileName = 'ai_assistant_${DateTime.now().millisecondsSinceEpoch}${path.extension(_selectedImage!.path)}';
-      final ref = FirebaseStorage.instance.ref().child('ai_assistants/$localUserId/$fileName');
-
-      final uploadTask = ref.putFile(_selectedImage!);
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      return downloadUrl;
+      // Firebase Storage disabled - use URL only
+      return null;
     } catch (e) {
       print('❌ [AI PERSONALIZATION] Error uploading image: $e');
       return null;
@@ -143,8 +135,7 @@ class _AIPersonalizationScreenState extends State<AIPersonalizationScreen> {
 
       final aiSettings = {
         'name': _nameController.text.trim(),
-        'personality': _selectedPersonality,
-        'emergencyMode': _isEmergencyMode,
+        'personality': _selectedPersonality,        'emergencyMode': _isEmergencyMode,
         'locationAware': _isLocationAware,
         'profileImageUrl': imageUrl,
         'updatedAt': FieldValue.serverTimestamp(),

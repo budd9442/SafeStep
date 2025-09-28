@@ -7,16 +7,15 @@ import 'package:safestep/views/map_view.dart';
 import 'package:safestep/views/menu_view.dart';
 import 'package:safestep/views/settings_view.dart';
 import 'package:safestep/widgets/panic_button_widget.dart';
-import 'package:safestep/views/safe_chat_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:safestep/services/sos_navigation_service.dart';
 import 'package:safestep/services/local_session.dart';
 import 'package:safestep/services/location_database.dart';
 import 'package:safestep/services/agent_data_service.dart';
-import 'package:safestep/views/auth/phone_auth_screen.dart';
 import 'package:safestep/services/location_service.dart';
 import 'package:safestep/services/native_background_location_service.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:safestep/views/safe_chat_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,7 +26,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // bool _showMap = false; // No longer needed, always show map
-  bool _featureOpen = false;
   LatLng? _currentPosition;
   bool _loading = true;
   String? _error;
@@ -38,9 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<QuerySnapshot>? _inboxSubscription;
   StreamSubscription<QuerySnapshot>? _sharedLocationSubscription;
   final GlobalKey<MapViewState> _mapViewKey = GlobalKey<MapViewState>();
-  Map<String, Map<String, dynamic>> _sharedLocations = {};
 
-  final TextEditingController _chatController = TextEditingController();
 
   void _onNavTap(int index) {
     setState(() {
@@ -136,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         
         setState(() {
-          _sharedLocations = sharedLocations;
+          // _sharedLocations = sharedLocations; // Removed unused field
         });
         
         print('📍 [SHARED LOCATIONS] Updated: ${sharedLocations.length} users sharing location');
@@ -441,168 +437,69 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openSafeChatWithMessage(String message) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => SafeChatView(initialMessage: message, initialMessageRole: 'user'),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final tween = Tween(begin: const Offset(0, 1), end: Offset.zero).chain(CurveTween(curve: Curves.easeInOut));
-          return SlideTransition(position: animation.drive(tween), child: child);
-        },
-      ),
-    );
-  }
-
-  Widget _buildChatInputBar() {
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-        color: Colors.transparent,
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(32),
-          color: Colors.white,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(32),
-              border: Border.all(color: const Color(0xFFE0E0E0), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _chatController,
-                    style: const TextStyle(fontSize: 16, color: Color(0xFF232946)),
-                    decoration: const InputDecoration(
-                      hintText: 'Whats on your mind...',
-                      hintStyle: TextStyle(color: Color(0xFFB0AEB8)),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    minLines: 1,
-                    maxLines: 3,
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty) {
-                        _openSafeChatWithMessage(value.trim());
-                        _chatController.clear();
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8F5FE8),
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF8F5FE8).withOpacity(0.18),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 24),
-                    splashRadius: 24,
-                    onPressed: () {
-                      final value = _chatController.text.trim();
-                      if (value.isNotEmpty) {
-                        _openSafeChatWithMessage(value);
-                        _chatController.clear();
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedChatBar() {
-    final show = _currentIndex == null;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 350),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SizeTransition(
-          sizeFactor: animation,
-          axis: Axis.vertical,
-          child: child,
-        ),
-      ),
-      child: show ? _buildChatInputBar() : const SizedBox.shrink(key: ValueKey('emptyChatBar')),
-    );
-  }
-
   void _onProfilePicChanged(String localPath) {
     _mapViewKey.currentState?.loadProfilePointerMarker(localPath);
   }
 
-  Future<void> _logout() async {
-    try {
-      // Show confirmation dialog
-      final bool? shouldLogout = await showDialog<bool>(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Logout'),
-            content: const Text('Are you sure you want to logout?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
+  Widget _buildQuickAccessTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Logout'),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 28,
+                ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: GoogleFonts.lato(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF232946),
               ),
-            ],
-          );
-        },
-      );
-
-      if (shouldLogout == true) {
-        // Clear local session
-        await LocalSession.clear();
-
-        // Navigate back to auth screen
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const PhoneAuthScreen()),
-            (route) => false,
-          );
-        }
-      }
-    } catch (e) {
-      print('Error during logout: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  void _openProfileSettings() {
-    // Use the same navigation as the settings tile
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ProfileSettingsRouteProxy()),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: GoogleFonts.lato(
+                fontSize: 10,
+                color: const Color(0xFF777B84),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -622,166 +519,146 @@ class _HomeScreenState extends State<HomeScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          title: Row(
-            children: [
-              Image.asset(
-                "assets/SafeStep.png",
-                height: 40,
-              ),
-              const SizedBox(width: 6),
-              const Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'Safe',
-                      style: TextStyle(
-                        color: Color(0xFF8F5FE8),
-                        fontWeight: FontWeight.bold,
-                        fontFamily: "QuintessentialCustom",
-                        fontSize: 20,
-                      ),
+        backgroundColor: const Color(0xFFF8F9FF),
+        body: _currentIndex == null
+            ? Column(
+                children: [
+                  // Share location card at top
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .where('isAuthenticated', isEqualTo: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return ShareLocationCard(
+                            onShare: () => _showShareLocationSheet(context),
+                            onLocationIconTap: null,
+                          );
+                        }
+                        final userDoc = snapshot.data!.docs.first;
+                        final data = userDoc.data() as Map<String, dynamic>?;
+                        final sharing = data != null && data['sharingLocation'] == true;
+                        if (sharing) {
+                          final List contacts = (data['shareLocationContacts'] ?? []) as List;
+                          return ActiveShareLocationPanel(
+                            contactIds: contacts.cast<String>(),
+                            onLocationIconTap: null,
+                          );
+                        } else {
+                          return ShareLocationCard(
+                            onShare: () => _showShareLocationSheet(context),
+                            onLocationIconTap: null,
+                          );
+                        }
+                      },
                     ),
-                    TextSpan(
-                      text: 'Step',
-                      style: TextStyle(
-                        color: Color(0xFF8F5FE8),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.person, color: Color(0xFF8F5FE8)),
-              onSelected: (value) async {
-                if (value == 'profile') {
-                  _openProfileSettings();
-                } else if (value == 'logout') {
-                  await _logout();
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem<String>(
-                  value: 'profile',
-                  child: ListTile(
-                    leading: Icon(Icons.settings),
-                    title: Text('Settings'),
                   ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'logout',
-                  child: ListTile(
-                    leading: Icon(Icons.logout),
-                    title: Text('Logout'),
-                  ),
-                ),
-              ],
-              tooltip: 'Account',
-            ),
-          ],
-        ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFB39DDB), // purple top
-                Color(0xFFD1C4E9),
-                Color(0xFFE9E3F7),
-                Color(0xFFF6F4FB),
-                Color(0xFFD1C4E9),
-                Color(0xFFB39DDB), // purple bottom
-              ],
-              stops: [0.0, 0.18, 0.5, 0.82, 0.92, 1.0],
-            ),
-          ),
-          child: _currentIndex == null
-              ? Stack(
-                  children: [
-                    // Map container in the background
-                    Positioned.fill(
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), // Match top and bottom gap
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: Material(
-                              elevation: 8,
-                              borderRadius: BorderRadius.circular(24),
-                              child: SizedBox(
-                                height: 500,
-                                width: double.infinity,
-                                child: MapView(
-                                  key: _mapViewKey,
-                                  currentPosition: _currentPosition,
-                                  loading: _loading,
-                                  error: _error,
-                                  dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
-                                  onDangerZoneTap: _onDangerZoneTap,
-                                ),
-                              ),
+                  const SizedBox(height: 16),
+                  // Square map container
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 4),
                             ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: MapView(
+                            key: _mapViewKey,
+                            currentPosition: _currentPosition,
+                            loading: _loading,
+                            error: _error,
+                            dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
+                            onDangerZoneTap: _onDangerZoneTap,
                           ),
                         ),
                       ),
                     ),
-                    // Foreground: ShareLocationCard/ActiveShareLocationPanel
-                    Column(
+                  ),
+                  const SizedBox(height: 16),
+                  // Quick access tiles
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                          child: StreamBuilder<QuerySnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .where('isAuthenticated', isEqualTo: true)
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                return ShareLocationCard(
-                                  onShare: () => _showShareLocationSheet(context),
-                                  onLocationIconTap: null,
-                                );
-                              }
-                              final userDoc = snapshot.data!.docs.first;
-                              final data = userDoc.data() as Map<String, dynamic>?;
-                              final sharing = data != null && data['sharingLocation'] == true;
-                              if (sharing) {
-                                final List contacts = (data['shareLocationContacts'] ?? []) as List;
-                                return ActiveShareLocationPanel(
-                                  contactIds: contacts.cast<String>(),
-                                  onLocationIconTap: null,
-                                );
-                              } else {
-                                return ShareLocationCard(
-                                  onShare: () => _showShareLocationSheet(context),
-                                  onLocationIconTap: null,
-                                );
-                              }
+                        Expanded(
+                          child: _buildQuickAccessTile(
+                            icon: Icons.phone_rounded,
+                            title: 'Fake Call',
+                            subtitle: 'Simulate call',
+                            color: Colors.green,
+                            onTap: () {
+                              // TODO: Implement fake call functionality
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Fake Call feature coming soon!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickAccessTile(
+                            icon: Icons.chat_rounded,
+                            title: 'SafeChat',
+                            subtitle: 'AI Assistant',
+                            color: const Color(0xFF8F5FE8),
+                            onTap: () {
+                              // Navigate to chat
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => const SafeChatView(),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickAccessTile(
+                            icon: Icons.emergency_rounded,
+                            title: 'Call 911',
+                            subtitle: 'Emergency help',
+                            color: Colors.red,
+                            onTap: () {
+                              // TODO: Implement 911 call functionality
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Call 911 feature coming soon!'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
                             },
                           ),
                         ),
                       ],
                     ),
-                  ],
-                )
-              : _currentIndex == 0
-                  ? MenuView(
-                      onFeatureOpen: (open) => setState(() => _featureOpen = open),
-                      onAddDangerZone: _addDangerZone,
-                      currentPosition: _currentPosition,
-                    )
-                  : SettingsView(onProfilePicChanged: _onProfilePicChanged),
-        ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              )
+            : _currentIndex == 0
+                ? MenuView(
+                    onFeatureOpen: (open) => setState(() {
+                      // _featureOpen = open; // Removed unused field
+                    }),
+                    onAddDangerZone: _addDangerZone,
+                    currentPosition: _currentPosition,
+                  )
+                : SettingsView(onProfilePicChanged: _onProfilePicChanged),
         bottomNavigationBar: CustomBottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: _onNavTap,
@@ -1674,7 +1551,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: -41,
+            top: -25,
             left: MediaQuery.of(context).size.width / 2 - 40.5,
             child: const PanicButtonWidget(),
           ),

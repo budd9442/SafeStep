@@ -81,9 +81,6 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
         });
       }
     }
-    if (widget.chatId != null) {
-      _loadChat(widget.chatId!);
-    }
   }
 
   void _initAnimations() {
@@ -112,6 +109,24 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
     if (_uid != null && mounted) {
       await _loadAIAssistantSettings();
       setState(() {});
+      
+      // Load chat after user ID is initialized
+      if (widget.chatId != null) {
+        _loadChat(widget.chatId!);
+        // Add timeout to prevent infinite loading
+        Timer(const Duration(seconds: 15), () {
+          if (mounted && _messages.isEmpty && _loading == false) {
+            print('⚠️ [CHAT] Loading timeout after 15 seconds - starting fresh chat');
+            setState(() {
+              _messages.add({
+                'role': 'system',
+                'content': 'Chat loading timed out. Starting fresh conversation.',
+                'timestamp': DateTime.now(),
+              });
+            });
+          }
+        });
+      }
     }
   }
 
@@ -167,18 +182,59 @@ class _SafeChatViewState extends State<SafeChatView> with TickerProviderStateMix
   }
 
   Future<void> _loadChat(String chatId) async {
-    if (_uid == null || _uid!.isEmpty) return;
+    if (_uid == null || _uid!.isEmpty) {
+      print('❌ [CHAT] No user ID available for loading chat: $chatId');
+      return;
+    }
     
-    final snap = await FirebaseFirestore.instance
-        .collection('users').doc(_uid!).collection('chats').doc(chatId)
-        .collection('messages').orderBy('timestamp').get();
-    setState(() {
-      _chatId = chatId;
-      _messages.clear();
-      for (final doc in snap.docs) {
-        _messages.add(doc.data());
+    try {
+      print('🔄 [CHAT] Loading chat: $chatId for user: $_uid');
+      
+      // First check if the chat document exists
+      final chatDoc = await FirebaseFirestore.instance
+          .collection('users').doc(_uid!).collection('chats').doc(chatId)
+          .get();
+      
+      if (!chatDoc.exists) {
+        print('⚠️ [CHAT] Chat document does not exist: $chatId');
+        setState(() {
+          _chatId = chatId;
+          _messages.clear();
+          _messages.add({
+            'role': 'system',
+            'content': 'Chat not found. Starting fresh conversation.',
+            'timestamp': DateTime.now(),
+          });
+        });
+        return;
       }
-    });
+      
+      // Load messages
+      final snap = await FirebaseFirestore.instance
+          .collection('users').doc(_uid!).collection('chats').doc(chatId)
+          .collection('messages').orderBy('timestamp').get();
+      
+      print('✅ [CHAT] Loaded ${snap.docs.length} messages for chat: $chatId');
+      setState(() {
+        _chatId = chatId;
+        _messages.clear();
+        for (final doc in snap.docs) {
+          _messages.add(doc.data());
+        }
+      });
+    } catch (e) {
+      print('❌ [CHAT] Error loading chat $chatId: $e');
+      setState(() {
+        _chatId = chatId;
+        _messages.clear();
+        // Add error message to show user
+        _messages.add({
+          'role': 'system',
+          'content': 'Failed to load chat history. Starting fresh conversation.',
+          'timestamp': DateTime.now(),
+        });
+      });
+    }
   }
 
   Future<void> _saveMessage(Map<String, dynamic> msg) async {
@@ -866,6 +922,7 @@ REMEMBER: JSON format only. NEVER send plain text.
   @override
   Widget build(BuildContext context) {
     // Show loading indicator ONLY if loading an existing chat (chatId provided, messages not loaded)
+    // Add timeout to prevent infinite loading
     if (widget.chatId != null && _messages.isEmpty && _loading == false) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FF),
