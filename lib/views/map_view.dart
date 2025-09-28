@@ -136,10 +136,12 @@ class MapViewState extends State<MapView> {
   Future<void> loadProfilePointerMarker(String profilePicPath) async {
     // Always reload the marker, even if the path is the same (to handle file overwrite)
     final marker = await createProfilePointerMarker(profilePicPath);
+    if (mounted) {
     setState(() {
       _profilePointerDescriptor = marker;
       _updateDangerZones();
     });
+    }
   }
 
   Future<String?> _fetchProfilePicWithoutCache() async {
@@ -173,17 +175,21 @@ class MapViewState extends State<MapView> {
     final profilePicPath = await _fetchProfilePicWithoutCache();
     if (profilePicPath != null) {
       final marker = await createProfilePointerMarker(profilePicPath);
+      if (mounted) {
       setState(() {
         _profilePointerDescriptor = marker;
         _updateDangerZones();
       });
+      }
     } else {
       // Use fallback: draw pointer with icon
       final marker = await _createPointerWithIconMarker();
+      if (mounted) {
       setState(() {
         _profilePointerDescriptor = marker;
         _updateDangerZones();
       });
+      }
     }
   }
 
@@ -231,9 +237,11 @@ class MapViewState extends State<MapView> {
       _updateSharedLocationMarkers();
     }
     
+    if (mounted) {
     setState(() {
       _updateDangerZones();
     });
+    }
   }
 
   void _updateDangerZones() {
@@ -330,10 +338,12 @@ class MapViewState extends State<MapView> {
     }
     
     // Update markers with shared location markers
-    setState(() {
-      _markers = _markers.where((marker) => !marker.markerId.value.startsWith('shared_')).toSet();
-      _markers.addAll(sharedMarkers);
-    });
+    if (mounted) {
+      setState(() {
+        _markers = _markers.where((marker) => !marker.markerId.value.startsWith('shared_')).toSet();
+        _markers.addAll(sharedMarkers);
+      });
+    }
     
     // Store current shared locations for comparison
     _lastSharedLocations = Map.from(widget.sharedLocations!);
@@ -695,7 +705,7 @@ class MapViewState extends State<MapView> {
               _mapController = controller;
             },
             onCameraMove: (position) {
-              if (!_userMovedMap) {
+              if (!_userMovedMap && mounted) {
                 setState(() {
                   _userMovedMap = true;
                 });
@@ -713,9 +723,11 @@ class MapViewState extends State<MapView> {
                 onPressed: () {
                   if (widget.currentPosition != null && _mapController != null) {
                     _mapController!.animateCamera(CameraUpdate.newLatLng(widget.currentPosition!));
+                    if (mounted) {
                     setState(() {
                       _userMovedMap = false;
                     });
+                    }
                   }
                 },
                 child: const Icon(Icons.my_location, color: Color(0xFF8F5FE8)),

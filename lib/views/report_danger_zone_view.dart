@@ -8,7 +8,8 @@ class ReportDangerZoneView extends StatefulWidget {
   final LatLng? currentPosition;
   final double? initialRadius;
   final Function(LatLng, double)? onDangerZoneChanged;
-  const ReportDangerZoneView({super.key, this.currentPosition, this.initialRadius, this.onDangerZoneChanged});
+  final VoidCallback? onBack;
+  const ReportDangerZoneView({super.key, this.currentPosition, this.initialRadius, this.onDangerZoneChanged, this.onBack});
   @override
   State<ReportDangerZoneView> createState() => _ReportDangerZoneViewState();
 }
@@ -248,7 +249,13 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
             ),
             child: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
           ),
           const SizedBox(width: 16),
@@ -420,7 +427,7 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
                   circles: _circles,
                   mapType: MapType.normal,
                   myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
+                  myLocationButtonEnabled: false,
                   zoomControlsEnabled: true,
                   scrollGesturesEnabled: true,
                   zoomGesturesEnabled: true,
@@ -561,102 +568,51 @@ class _ReportDangerZoneViewState extends State<ReportDangerZoneView> {
   }
 
   Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _currentPosition != null && _selectedPosition != _currentPosition
-                ? () {
-                    setState(() {
-                      _selectedPosition = _currentPosition;
-                      _updateMapMarkers();
-                      _updateDangerZone();
-                    });
-                    _mapController?.animateCamera(
-                      CameraUpdate.newLatLngZoom(_currentPosition!, 16.0),
-                    );
-                  }
-                : null,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              side: const BorderSide(color: Color(0xFF8F5FE8)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.my_location,
-                  color: Color(0xFF8F5FE8),
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Current Location',
-                    style: GoogleFonts.lato(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF8F5FE8),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitDangerZone,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
+          elevation: 0,
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: _isSubmitting ? null : _submitDangerZone,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'Report Danger Zone',
+                      style: GoogleFonts.lato(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        size: 18,
                       ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'Report Danger Zone',
-                          style: GoogleFonts.lato(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-          ),
-        ),
-      ],
+                ],
+              ),
+      ),
     );
   }
 }

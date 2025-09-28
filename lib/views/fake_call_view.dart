@@ -10,7 +10,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:io';
 
 class FakeCallView extends StatefulWidget {
-  const FakeCallView({super.key});
+  final VoidCallback? onBack;
+  const FakeCallView({super.key, this.onBack});
   @override
   State<FakeCallView> createState() => _FakeCallViewState();
 }
@@ -34,6 +35,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     {'label': 'No Recording', 'asset': ''},
     {'label': 'Random Male', 'asset': 'assets/male_voice.mp3'},
     {'label': 'Random Female', 'asset': 'assets/female_voice.mp3'},
+    {'label': 'SafeStep Recording', 'asset': 'assets/music.mp3'},
   ];
 
   final List<Map<String, dynamic>> _templates = [
@@ -49,7 +51,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
       'label': 'Dad',
       'callerName': 'Dad',
       'callerNumber': '',
-      'asset': 'assets/male_voice.mp3',
+      'asset': 'assets/music.mp3',
       'icon': Icons.person,
       'color': Color(0xFF667eea),
     },
@@ -57,7 +59,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
       'label': 'Mom',
       'callerName': 'Mom',
       'callerNumber': '+1 555-987-6543',
-      'asset': 'assets/female_voice.mp3',
+      'asset': 'assets/music.mp3',
       'icon': Icons.person,
       'color': Color(0xFFfa709a),
     },
@@ -285,7 +287,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
     await _saveFakeCallPrefs();
-    setState(() => _isCalling = true);
+    if (mounted) setState(() => _isCalling = true);
     if (Platform.isAndroid) {
       await _ensurePhoneNumberPermission();
       debugPrint('SimulateCall: _selectedRecording=$_selectedRecording');
@@ -308,11 +310,11 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     } else {
       _showFakeCallDialog();
     }
-    setState(() => _isCalling = false);
+    if (mounted) setState(() => _isCalling = false);
   }
 
   void _showFakeCallDialog() async {
-    setState(() => _isCalling = true);
+    if (mounted) setState(() => _isCalling = true);
     _isRinging = true;
     _audioPlayer?.dispose();
     _audioPlayer = AudioPlayer();
@@ -323,6 +325,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     if (!_isRinging) return;
     _audioPlayer?.stop();
     _isRinging = false;
+    if (!mounted) return;
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -473,7 +476,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
         );
       },
     );
-    setState(() => _isCalling = false);
+    if (mounted) setState(() => _isCalling = false);
   }
 
   Future<void> _playRecording() async {
@@ -491,11 +494,13 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
   }
 
   void _applyTemplate(Map<String, dynamic> template) {
+    print('🔄 [TEMPLATE] Applying template: ${template['callerName']}');
     setState(() {
       _callerName = template['callerName'] ?? 'Unknown';
       _callerNumber = template['callerNumber'] ?? '';
       _selectedRecording = template['asset'] ?? '';
     });
+    print('✅ [TEMPLATE] Applied - Name: $_callerName, Number: $_callerNumber, Recording: $_selectedRecording');
     _saveFakeCallPrefs();
   }
 
@@ -586,7 +591,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                   child: IconButton(
                     onPressed: () {
                       _stopRecording();
-                      setState(() => _showInCallUI = false);
+                      if (mounted) setState(() => _showInCallUI = false);
                       FlutterCallkitIncoming.endAllCalls();
                     },
                     icon: const Icon(
@@ -643,16 +648,18 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                           children: [
                             // Compact layout - all in one view
                             Expanded(
-                              child: Column(
-                                children: [
-                                  _buildCompactCallerInfo(),
-                                  const SizedBox(height: 16),
-                                  _buildCompactAudio(),
-                                  const SizedBox(height: 16),
-                                  _buildCompactTemplates(),
-                                  const SizedBox(height: 20),
-                                  _buildActionButtons(),
-                                ],
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    _buildTemplatePills(),
+                                    const SizedBox(height: 16),
+                                    _buildCompactCallerInfo(),
+                                    const SizedBox(height: 16),
+                                    _buildCompactAudio(),
+                                    const SizedBox(height: 20),
+                                    _buildActionButtons(),
+                                  ],
+                                ),
                               ),
                             ),
                             
@@ -688,7 +695,13 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
             ),
             child: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
           ),
           const SizedBox(width: 16),
@@ -770,7 +783,9 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                   child: _buildCompactTextField(
                     label: 'Name',
                     initialValue: _callerName,
-                    onChanged: (val) => setState(() => _callerName = val),
+                    onChanged: (val) {
+                      if (mounted) setState(() => _callerName = val);
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -779,7 +794,9 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                     label: 'Number',
                     initialValue: _callerNumber,
                     keyboardType: TextInputType.phone,
-                    onChanged: (val) => setState(() => _callerNumber = val),
+                    onChanged: (val) {
+                      if (mounted) setState(() => _callerNumber = val);
+                    },
                   ),
                 ),
               ],
@@ -841,52 +858,53 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     );
   }
 
-  Widget _buildCompactTemplates() {
+  Widget _buildTemplatePills() {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _templates.map((template) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => _applyTemplate(template),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF8F5FE8),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8F5FE8).withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.category,
-                    color: Color(0xFF8F5FE8),
-                    size: 20,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        template['icon'] as IconData,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        template['callerName'] as String,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Quick Templates',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF232946),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildCompactTemplatesGrid(),
-          ],
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -1020,26 +1038,6 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     );
   }
 
-  Widget _buildCompactTemplatesGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.0,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: _templates.length,
-      itemBuilder: (context, index) {
-        final template = _templates[index];
-        return _CompactTemplateCard(
-          template: template,
-          onTap: () => _applyTemplate(template),
-        );
-      },
-    );
-  }
 
   Widget _buildCustomCallForm() {
     return Container(
@@ -1074,7 +1072,9 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
             _buildCompactTextField(
               label: 'Caller Name',
               initialValue: _callerName,
-              onChanged: (val) => setState(() => _callerName = val),
+              onChanged: (val) {
+                if (mounted) setState(() => _callerName = val);
+              },
             ),
             const SizedBox(height: 16),
             
@@ -1083,7 +1083,9 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
               label: 'Caller Number',
               initialValue: _callerNumber,
               keyboardType: TextInputType.phone,
-              onChanged: (val) => setState(() => _callerNumber = val),
+              onChanged: (val) {
+                if (mounted) setState(() => _callerNumber = val);
+              },
             ),
             const SizedBox(height: 16),
             
@@ -1114,6 +1116,7 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
         ),
         const SizedBox(height: 6),
         TextFormField(
+          key: ValueKey(initialValue), // Force rebuild when value changes
           initialValue: initialValue,
           keyboardType: keyboardType,
           onChanged: onChanged,
@@ -1164,72 +1167,17 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
       items: _recordings
           .map((rec) => DropdownMenuItem<String>(
                 value: rec['asset'],
-                child: Text(rec['label']!),
+                child: Text(
+                  rec['label']!,
+                  style: const TextStyle(color: Colors.black),
+                ),
               ))
           .toList(),
-      onChanged: (val) => setState(() => _selectedRecording = val),
+      onChanged: (val) {
+        if (mounted) setState(() => _selectedRecording = val);
+      },
     );
   }
 
 }
 
-class _CompactTemplateCard extends StatelessWidget {
-  final Map<String, dynamic> template;
-  final VoidCallback onTap;
-
-  const _CompactTemplateCard({required this.template, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            template['color'] as Color,
-            (template['color'] as Color).withOpacity(0.8),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (template['color'] as Color).withOpacity(0.3),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  template['icon'] as IconData,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  template['label']!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

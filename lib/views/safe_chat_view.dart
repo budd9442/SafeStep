@@ -925,30 +925,42 @@ REMEMBER: JSON format only. NEVER send plain text.
     // Add timeout to prevent infinite loading
     if (widget.chatId != null && _messages.isEmpty && _loading == false) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FF),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8F5FE8).withOpacity(0.1),
-                  shape: BoxShape.circle,
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF8F5FE8),
+                Color(0xFFE9E4F6),
+                Color(0xFFF8F9FF),
+              ],
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8F5FE8)),
+                  ),
                 ),
-                child: const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8F5FE8)),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading chat...',
+                  style: GoogleFonts.lato(
+                    fontSize: 16,
+                    color: const Color(0xFF232946),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading chat...',
-                style: GoogleFonts.lato(
-                  fontSize: 16,
-                  color: const Color(0xFF6B7280),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -957,155 +969,131 @@ REMEMBER: JSON format only. NEVER send plain text.
     // Show chat selection screen if no chat is active (no chatId, no initialMessage)
     if (_chatId == null && widget.initialMessage == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FF),
-        body: FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                // Modern App Bar
-                SliverAppBar(
-                  expandedHeight: 120,
-                  floating: false,
-                  pinned: true,
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF8F5FE8),
-                            Color(0xFF667eea),
-                          ],
-                        ),
-                      ),
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: () => Navigator.of(context).maybePop(),
-                                icon: const Icon(
-                                  Icons.arrow_back_ios,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'SafeChat',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                    Text(
-                                      'AI-powered safety assistant',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF8F5FE8),
+                Color(0xFFE9E4F6),
+                Color(0xFFF8F9FF),
+              ],
+            ),
+          ),
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Column(
+                children: [
+                  // Modern App Bar
+                  Container(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top + 16,
+                      left: 24,
+                      right: 24,
+                      bottom: 16,
                     ),
-                  ),
-                ),
-
-                // Content
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        // Welcome Section
                         Container(
-                          padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF8F5FE8).withOpacity(0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.shield_rounded,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Your Safety Assistant',
-                                style: GoogleFonts.lato(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Get instant help and guidance for any safety concerns',
-                                style: GoogleFonts.lato(
-                                  fontSize: 16,
-                                  color: Colors.white70,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
                         ),
-                        const SizedBox(height: 32),
-                        
-                        // Chat History
-                        _buildChatHistory(),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'SafeChat',
+                            style: GoogleFonts.lato(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  
+                  // Main Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Welcome Section
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.shield_rounded,
+                                    color: Color(0xFF8F5FE8),
+                                    size: 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Your Safety Assistant',
+                                  style: GoogleFonts.lato(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF232946),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Get instant help and guidance for any safety concerns',
+                                  style: GoogleFonts.lato(
+                                    fontSize: 16,
+                                    color: const Color(0xFF777B84),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          
+                          // Chat History
+                          _buildChatHistory(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
         floatingActionButton: Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
-            ),
+            color: const Color(0xFF8F5FE8),
             borderRadius: BorderRadius.circular(30),
             boxShadow: [
               BoxShadow(
@@ -1144,7 +1132,6 @@ REMEMBER: JSON format only. NEVER send plain text.
     
     // Main Chat Interface
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
       body: Stack(
         children: [
           // Background
@@ -1184,178 +1171,37 @@ REMEMBER: JSON format only. NEVER send plain text.
 
   Widget _buildModernAppBar() {
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF8F5FE8).withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 24,
+        right: 24,
+        bottom: 16,
+      ),
+      child: Row(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          const SizedBox(width: 16),
+              
+          Expanded(
+            child: Text(
+              'SafeChat',
+              style: GoogleFonts.lato(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
           ),
         ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(
-                  Icons.arrow_back_ios,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              
-              // Bot Avatar
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: _aiProfileImageUrl != null
-                    ? ClipOval(
-                        child: Image.network(
-                          _aiProfileImageUrl!,
-                          width: 24,
-                          height: 24,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.shield_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            );
-                          },
-                        ),
-                      )
-                    : const Icon(
-                        Icons.shield_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-              ),
-              const SizedBox(width: 12),
-              
-              // Bot Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _aiName ?? _botNickname,
-                      style: GoogleFonts.lato(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.green.withOpacity(0.5),
-                                blurRadius: 4,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Online',
-                          style: GoogleFonts.lato(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              
-                            // Test Fake Call Button (for debugging)
-              IconButton(
-                onPressed: () async {
-                  debugPrint('[TEST] Manual fake call test triggered');
-                  await _triggerFakeCallFromAgent({
-                    'caller_name': 'Test Call',
-                    'caller_number': '+1234567890'
-                  });
-                },
-                icon: const Icon(
-                  Icons.phone,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                tooltip: 'Test Fake Call',
-              ),
-              
-              // Test JSON Parsing Button (for debugging)
-              IconButton(
-                onPressed: () {
-                  debugPrint('[TEST] Testing JSON parsing...');
-                  
-                  // Test 1: Valid JSON
-                  final testResponse1 = '{"message": "Test message", "risk_analysis": "Test risk analysis", "action": null}';
-                  debugPrint('[TEST] Test 1 - Valid JSON: $testResponse1');
-                  
-                  try {
-                    final parsed1 = jsonDecode(testResponse1);
-                    debugPrint('[TEST] Test 1 - Parsed successfully: ${parsed1['message']}');
-                  } catch (e) {
-                    debugPrint('[TEST] Test 1 - JSON parsing failed: $e');
-                  }
-                  
-                  // Test 2: Markdown wrapped JSON (like what you're getting)
-                  final testResponse2 = '```json\n{"message": "Test message", "risk_analysis": "Test risk analysis", "action": null}\n```';
-                  debugPrint('[TEST] Test 2 - Markdown JSON: $testResponse2');
-                  
-                  try {
-                    String cleanResponse = testResponse2.trim();
-                    if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
-                      cleanResponse = cleanResponse.substring(7, cleanResponse.length - 3).trim();
-                      debugPrint('[TEST] Test 2 - Cleaned response: $cleanResponse');
-                    }
-                    
-                    final parsed2 = jsonDecode(cleanResponse);
-                    debugPrint('[TEST] Test 2 - Parsed successfully: ${parsed2['message']}');
-                  } catch (e) {
-                    debugPrint('[TEST] Test 2 - JSON parsing failed: $e');
-                  }
-                },
-                icon: const Icon(
-                  Icons.code,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                tooltip: 'Test JSON Parsing',
-              ),
-              
-              // Settings Button
-              IconButton(
-                onPressed: _showSettingsDialog,
-                icon: const Icon(
-                  Icons.more_vert,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1431,7 +1277,7 @@ REMEMBER: JSON format only. NEVER send plain text.
                     message['content'] ?? '',
                     style: GoogleFonts.lato(
                       fontSize: 16,
-                      color: isUser ? Colors.white : const Color(0xFF1A1A2E),
+                      color: isUser ? Colors.white : const Color(0xFF232946),
                       height: 1.4,
                     ),
                   ),
@@ -1566,7 +1412,12 @@ REMEMBER: JSON format only. NEVER send plain text.
 
   Widget _buildModernInputBar() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).padding.bottom + 16,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.9),
         boxShadow: [
@@ -1577,79 +1428,77 @@ REMEMBER: JSON format only. NEVER send plain text.
           ),
         ],
       ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FF),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: const Color(0xFFE5E7EB),
-                    width: 1,
-                  ),
-                ),
-                child: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(
-                    hintText: 'Type your message...',
-                    hintStyle: GoogleFonts.lato(
-                      color: const Color(0xFF9CA3AF),
-                      fontSize: 16,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                  ),
-                  style: GoogleFonts.lato(
-                    fontSize: 16,
-                    color: const Color(0xFF1A1A2E),
-                  ),
-                  maxLines: null,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (text) {
-                    if (text.trim().isNotEmpty) {
-                      _sendMessage(text.trim());
-                    }
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Container(
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
+                color: const Color(0xFFF8F9FF),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFFE5E7EB),
+                  width: 1,
                 ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF8F5FE8).withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
-              child: IconButton(
-                onPressed: () {
-                  if (_controller.text.trim().isNotEmpty) {
-                    _sendMessage(_controller.text.trim());
+              child: TextField(
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: 'Type your message...',
+                  hintStyle: GoogleFonts.lato(
+                    color: const Color(0xFF9CA3AF),
+                    fontSize: 16,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                ),
+                style: GoogleFonts.lato(
+                  fontSize: 16,
+                  color: const Color(0xFF232946),
+                ),
+                maxLines: null,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (text) {
+                  if (text.trim().isNotEmpty) {
+                    _sendMessage(text.trim());
                   }
                 },
-                icon: const Icon(
-                  Icons.send_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                iconSize: 24,
-                padding: const EdgeInsets.all(12),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8F5FE8).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: () {
+                if (_controller.text.trim().isNotEmpty) {
+                  _sendMessage(_controller.text.trim());
+                }
+              },
+              icon: const Icon(
+                Icons.send_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+              iconSize: 24,
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1714,7 +1563,7 @@ REMEMBER: JSON format only. NEVER send plain text.
                   style: GoogleFonts.lato(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1A1A2E),
+                    color: const Color(0xFF232946),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1739,7 +1588,7 @@ REMEMBER: JSON format only. NEVER send plain text.
               style: GoogleFonts.lato(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A2E),
+                color: const Color(0xFF232946),
               ),
             ),
             const SizedBox(height: 16),
@@ -1810,7 +1659,7 @@ REMEMBER: JSON format only. NEVER send plain text.
                         style: GoogleFonts.lato(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: const Color(0xFF1A1A2E),
+                          color: const Color(0xFF232946),
                         ),
                       ),
                       if (createdAt != null)
