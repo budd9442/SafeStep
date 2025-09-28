@@ -65,19 +65,7 @@ class _PrivacySettingsViewState extends State<PrivacySettingsView> {
                 onChanged: (val) => setState(() => activityStatus = val),
               ),
             ),
-            const SizedBox(height: 16),
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              elevation: 0,
-              color: Colors.white,
-              child: SwitchListTile(
-                title: const Text('Personalized ads', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                subtitle: const Text('Allow app to show you personalized ads.'),
-                value: personalizedAds,
-                activeColor: const Color(0xFF8F5FE8),
-                onChanged: (val) => setState(() => personalizedAds = val),
-              ),
-            ),
+            
             const SizedBox(height: 32),
             Text(
               'You can change your privacy preferences at any time. For more information, see our Privacy Policy.',
