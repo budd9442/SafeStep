@@ -14,6 +14,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.util.Log
 import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
@@ -96,6 +97,35 @@ class MainActivity : FlutterActivity() {
                         } else {
                             result.success(maxDelta)
                         }
+                    }
+                }
+                "startShakeDetection" -> {
+                    try {
+                        Log.d("MainActivity", "Starting shake detection service...")
+                        val shakeServiceIntent = Intent(this, ShakeDetectionService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(shakeServiceIntent)
+                            Log.d("MainActivity", "Started shake detection service as foreground service")
+                        } else {
+                            startService(shakeServiceIntent)
+                            Log.d("MainActivity", "Started shake detection service as background service")
+                        }
+                        result.success("Shake detection service started successfully")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to start shake detection service: ${e.message}")
+                        result.error("SERVICE_ERROR", "Failed to start shake detection service: ${e.message}", null)
+                    }
+                }
+                "stopShakeDetection" -> {
+                    try {
+                        Log.d("MainActivity", "Stopping shake detection service...")
+                        val shakeServiceIntent = Intent(this, ShakeDetectionService::class.java)
+                        stopService(shakeServiceIntent)
+                        Log.d("MainActivity", "Stopped shake detection service")
+                        result.success("Shake detection service stopped successfully")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to stop shake detection service: ${e.message}")
+                        result.error("SERVICE_ERROR", "Failed to stop shake detection service: ${e.message}", null)
                     }
                 }
                 else -> result.notImplemented()

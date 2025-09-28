@@ -32,7 +32,6 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
 
   final List<Map<String, String>> _recordings = [
     {'label': 'No Recording', 'asset': ''},
-    {'label': 'Distress Example', 'asset': 'assets/music.mp3'},
     {'label': 'Random Male', 'asset': 'assets/male_voice.mp3'},
     {'label': 'Random Female', 'asset': 'assets/female_voice.mp3'},
   ];
@@ -607,72 +606,57 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
+      body: Stack(
+        children: [
+          // Modern gradient background
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF8F5FE8),
+                  Color(0xFFE9E4F6),
+                  Color(0xFFF8F9FF),
+                ],
+              ),
+            ),
+          ),
+          
+          // Content
+          Column(
+            children: [
               // Modern App Bar
-              SliverAppBar(
-                expandedHeight: 120,
-                floating: false,
-                pinned: true,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          const Color(0xFF8F5FE8),
-                          const Color(0xFF667eea),
-                        ],
-                      ),
-                    ),
-                    child: SafeArea(
+              _buildModernAppBar(),
+              
+              // Main Content
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                        child: Row(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
                           children: [
-                            IconButton(
-                              onPressed: () => Navigator.of(context).maybePop(),
-                              icon: const Icon(
-                                Icons.arrow_back_ios,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            const Expanded(
+                            // Compact layout - all in one view
+                            Expanded(
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    'Fake Call',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Simulate incoming calls for safety',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                                  _buildCompactCallerInfo(),
+                                  const SizedBox(height: 16),
+                                  _buildCompactAudio(),
+                                  const SizedBox(height: 16),
+                                  _buildCompactTemplates(),
+                                  const SizedBox(height: 20),
+                                  _buildActionButtons(),
                                 ],
                               ),
                             ),
+                            
+                            if (_isCalling) _buildCallingStatusCard(),
                           ],
                         ),
                       ),
@@ -680,34 +664,329 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
                   ),
                 ),
               ),
-
-              // Content
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Templates Section
-                      _buildSectionHeader('Quick Templates', Icons.category),
-                      const SizedBox(height: 16),
-                      _buildTemplatesGrid(),
-                      const SizedBox(height: 32),
-                      
-                      // Custom Call Section
-                      _buildSectionHeader('Custom Call', Icons.edit),
-                      const SizedBox(height: 16),
-                      _buildCustomCallForm(),
-                      const SizedBox(height: 24),
-                      
-                      // Action Buttons
-                      _buildActionButtons(),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernAppBar() {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 24,
+        right: 24,
+        bottom: 16,
+      ),
+      child: Row(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Fake Call',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Simulate incoming calls for safety',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactCallerInfo() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: Color(0xFF8F5FE8),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Caller Information',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF232946),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCompactTextField(
+                    label: 'Name',
+                    initialValue: _callerName,
+                    onChanged: (val) => setState(() => _callerName = val),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildCompactTextField(
+                    label: 'Number',
+                    initialValue: _callerNumber,
+                    keyboardType: TextInputType.phone,
+                    onChanged: (val) => setState(() => _callerNumber = val),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactAudio() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.audiotrack,
+                    color: Color(0xFF8F5FE8),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Audio Recording',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF232946),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildCompactDropdown(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactTemplates() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8F5FE8).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.category,
+                    color: Color(0xFF8F5FE8),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Quick Templates',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF232946),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildCompactTemplatesGrid(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF8F5FE8), Color(0xFF667eea)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8F5FE8).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: _isCalling ? null : () => triggerFakeCallSystem(
+                  callerName: _callerName,
+                  callerNumber: _callerNumber,
+                  audioAsset: _selectedRecording ?? '',
+                ),
+                child: Center(
+                  child: _isCalling
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Simulate Fake Call',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCallingStatusCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.green, width: 2),
+              ),
+              child: const Icon(
+                Icons.call,
+                color: Colors.green,
+                size: 48,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Calling...',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF232946),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -741,20 +1020,20 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
     );
   }
 
-  Widget _buildTemplatesGrid() {
+  Widget _buildCompactTemplatesGrid() {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 1.2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisCount: 3,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: _templates.length,
       itemBuilder: (context, index) {
         final template = _templates[index];
-        return _TemplateCard(
+        return _CompactTemplateCard(
           template: template,
           onTap: () => _applyTemplate(template),
         );
@@ -792,38 +1071,35 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
             const SizedBox(height: 20),
             
             // Caller Name Field
-            _buildModernTextField(
+            _buildCompactTextField(
               label: 'Caller Name',
               initialValue: _callerName,
               onChanged: (val) => setState(() => _callerName = val),
-              onSaved: (val) => _callerName = val?.trim().isEmpty ?? true ? 'Unknown' : val!.trim(),
             ),
             const SizedBox(height: 16),
             
             // Caller Number Field
-            _buildModernTextField(
+            _buildCompactTextField(
               label: 'Caller Number',
               initialValue: _callerNumber,
               keyboardType: TextInputType.phone,
               onChanged: (val) => setState(() => _callerNumber = val),
-              onSaved: (val) => _callerNumber = val?.trim() ?? '',
             ),
             const SizedBox(height: 16),
             
             // Recording Dropdown
-            _buildModernDropdown(),
+            _buildCompactDropdown(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildModernTextField({
+  Widget _buildCompactTextField({
     required String label,
     required String initialValue,
     TextInputType? keyboardType,
     required Function(String) onChanged,
-    required Function(String?) onSaved,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,229 +1107,129 @@ class _FakeCallViewState extends State<FakeCallView> with TickerProviderStateMix
         Text(
           label,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
             color: Color(0xFF6B7280),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         TextFormField(
           initialValue: initialValue,
           keyboardType: keyboardType,
           onChanged: onChanged,
-          onSaved: onSaved,
+          style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             filled: true,
             fillColor: const Color(0xFFF9FAFB),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF8F5FE8), width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildModernDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Recording',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF6B7280),
-          ),
+  Widget _buildCompactDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedRecording ?? _recordings[0]['asset'],
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF9FAFB),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
         ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _selectedRecording ?? _recordings[0]['asset'],
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF8F5FE8), width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          ),
-          items: _recordings
-              .map((rec) => DropdownMenuItem<String>(
-                    value: rec['asset'],
-                    child: Text(rec['label']!),
-                  ))
-              .toList(),
-          onChanged: (val) => setState(() => _selectedRecording = val),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
         ),
-      ],
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF8F5FE8), width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+      style: const TextStyle(fontSize: 14),
+      items: _recordings
+          .map((rec) => DropdownMenuItem<String>(
+                value: rec['asset'],
+                child: Text(rec['label']!),
+              ))
+          .toList(),
+      onChanged: (val) => setState(() => _selectedRecording = val),
     );
   }
 
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        // Simulate Call Button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isCalling ? null : _simulateCall,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8F5FE8),
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: _isCalling
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.call, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Simulate Fake Call',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-        
-      ],
-    );
-  }
 }
 
-class _TemplateCard extends StatefulWidget {
+class _CompactTemplateCard extends StatelessWidget {
   final Map<String, dynamic> template;
   final VoidCallback onTap;
 
-  const _TemplateCard({
-    required this.template,
-    required this.onTap,
-  });
-
-  @override
-  State<_TemplateCard> createState() => _TemplateCardState();
-}
-
-class _TemplateCardState extends State<_TemplateCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  const _CompactTemplateCard({required this.template, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _scaleAnimation.value,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  widget.template['color'] as Color,
-                  (widget.template['color'] as Color).withOpacity(0.8),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (widget.template['color'] as Color).withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            template['color'] as Color,
+            (template['color'] as Color).withOpacity(0.8),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (template['color'] as Color).withOpacity(0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  template['icon'] as IconData,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  template['label']!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: widget.onTap,
-                onTapDown: (_) => _controller.forward(),
-                onTapUp: (_) => _controller.reverse(),
-                onTapCancel: () => _controller.reverse(),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        widget.template['icon'] as IconData,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        widget.template['label']!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

@@ -74,20 +74,29 @@ class ShakeDetectionService : Service(), SensorEventListener {
     }
 
     override fun onCreate() {
+        Log.d("ShakeDetectionService", "Service onCreate() called")
         // Load user's recorded max gesture value from SharedPreferences
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         if (prefs.contains("user_max_gesture_value")) {
             userMaxGestureValue = prefs.getFloat("user_max_gesture_value", Float.POSITIVE_INFINITY)
+            Log.d("ShakeDetectionService", "Loaded user max gesture value: $userMaxGestureValue")
         } else {
             userMaxGestureValue = Float.POSITIVE_INFINITY
+            Log.w("ShakeDetectionService", "No user max gesture value found, using default")
         }
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
+        if (accelSensor != null) {
+            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
+            Log.d("ShakeDetectionService", "Accelerometer sensor registered")
+        } else {
+            Log.e("ShakeDetectionService", "No accelerometer sensor available")
+        }
         accelLast = SensorManager.GRAVITY_EARTH
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Shake detection active"))
+        Log.d("ShakeDetectionService", "Service started in foreground")
         val filter = android.content.IntentFilter().apply {
             addAction("com.example.safestep.FAKE_CALL_ACCEPTED")
             addAction("com.example.safestep.FAKE_CALL_REJECTED")
@@ -96,6 +105,7 @@ class ShakeDetectionService : Service(), SensorEventListener {
     }
 
     override fun onDestroy() {
+        Log.d("ShakeDetectionService", "Service onDestroy() called")
         super.onDestroy()
         sensorManager.unregisterListener(this)
         unregisterReceiver(fakeCallActionReceiver)

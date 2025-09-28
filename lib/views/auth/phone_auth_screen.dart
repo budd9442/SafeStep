@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:safestep/home_screen.dart';
 import 'package:safestep/views/auth/user_details_form_screen.dart';
@@ -378,6 +379,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       print('✅ [AUTH] User session created successfully in Firestore with ID: ${userDoc.id}');
       await LocalSession.setCurrentUserId(userDoc.id);
       print('✅ [AUTH] Local session set with user ID: ${userDoc.id}');
+      
+      // Start shake detection service for existing users (after calibration)
+      if (userData?['profileComplete'] == true) {
+        print('🔄 [AUTH] Starting shake detection service for existing user');
+        try {
+          const platform = MethodChannel('com.example.safestep/shake_gesture');
+          final result = await platform.invokeMethod('startShakeDetection');
+          print('✅ [AUTH] Shake detection service started: $result');
+        } catch (e) {
+          print('⚠️ [AUTH] Failed to start shake detection service: $e');
+        }
+      }
       
     } catch (e) {
       print('❌ [AUTH] Error creating user session: $e');

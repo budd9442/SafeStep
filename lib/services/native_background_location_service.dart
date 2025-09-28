@@ -121,9 +121,11 @@ class NativeBackgroundLocationService {
       _isRunning = true;
 
       // Start location service with native background capabilities
+      print('🔄 [NATIVE BACKGROUND] Starting native location service...');
       await _startNativeLocationService();
 
       // Update location immediately
+      print('🔄 [NATIVE BACKGROUND] Sending initial location update...');
       await _updateLocation();
 
       // Force a few location updates to test

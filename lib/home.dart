@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:safestep/services/local_session.dart';
@@ -353,6 +354,16 @@ class _HomeState extends State<Home> {
       );
 
       if (shouldLogout == true) {
+        // Stop shake detection service
+        print('🛑 [LOGOUT] Stopping shake detection service');
+        try {
+          const platform = MethodChannel('com.example.safestep/shake_gesture');
+          await platform.invokeMethod('stopShakeDetection');
+          print('✅ [LOGOUT] Shake detection service stopped');
+        } catch (e) {
+          print('⚠️ [LOGOUT] Failed to stop shake detection service: $e');
+        }
+
         // Clear local session
         await LocalSession.clear();
 

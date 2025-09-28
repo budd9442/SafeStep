@@ -51,6 +51,27 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
     super.dispose();
   }
 
+  String? _parseTimestamp(dynamic timestamp) {
+    if (timestamp == null) return null;
+    
+    try {
+      if (timestamp is String) {
+        return timestamp;
+      } else if (timestamp is Map<String, dynamic>) {
+        // Handle Firestore Timestamp format
+        final seconds = timestamp['_seconds'] as int?;
+        if (seconds != null) {
+          final dateTime = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+          return dateTime.toIso8601String();
+        }
+      }
+    } catch (e) {
+      print('⚠️ [LOCATION HISTORY] Error parsing timestamp: $e');
+    }
+    
+    return null;
+  }
+
   Future<void> _loadLocationHistory() async {
     try {
       setState(() {
@@ -103,7 +124,7 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
               allLocations.add({
                 'latitude': (location['latitude'] as num).toDouble(),
                 'longitude': (location['longitude'] as num).toDouble(),
-                'timestamp': location['timestamp'] ?? location['receivedAt']?.toString() ?? DateTime.now().toIso8601String(),
+                'timestamp': _parseTimestamp(location['timestamp']) ?? _parseTimestamp(location['receivedAt']) ?? DateTime.now().toIso8601String(),
                 'accuracy': location['accuracy'] != null ? (location['accuracy'] as num).toDouble() : null,
                 'sessionId': sessionId,
                 'source': 'api',
@@ -207,7 +228,7 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
               allLocations.add({
                 'latitude': (location['latitude'] as num).toDouble(),
                 'longitude': (location['longitude'] as num).toDouble(),
-                'timestamp': location['timestamp'] ?? location['receivedAt']?.toString() ?? DateTime.now().toIso8601String(),
+                'timestamp': _parseTimestamp(location['timestamp']) ?? _parseTimestamp(location['receivedAt']) ?? DateTime.now().toIso8601String(),
                 'accuracy': location['accuracy'] != null ? (location['accuracy'] as num).toDouble() : null,
                 'sessionId': sessionId,
                 'source': 'api',
@@ -322,7 +343,7 @@ class _SharedUserLocationHistoryScreenState extends State<SharedUserLocationHist
           Container(
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(12), 
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),

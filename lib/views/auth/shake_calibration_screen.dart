@@ -387,11 +387,12 @@ class _ShakeCalibrationScreenState extends State<ShakeCalibrationScreen> {
 
       // Start shake detection service
       try {
+        print('🔄 [SHAKE CALIBRATION] Attempting to start shake detection service...');
         const platform = MethodChannel('com.example.safestep/shake_gesture');
-        await platform.invokeMethod('startShakeDetection');
-        print('✅ [SHAKE CALIBRATION] Started shake detection service');
+        final result = await platform.invokeMethod('startShakeDetection');
+        print('✅ [SHAKE CALIBRATION] Started shake detection service: $result');
       } catch (e) {
-        print('⚠️ [SHAKE CALIBRATION] Failed to start shake detection service: $e');
+        print('❌ [SHAKE CALIBRATION] Failed to start shake detection service: $e');
         // Continue anyway
       }
 

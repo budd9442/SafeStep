@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:safestep/views/map_view.dart';
 import 'package:safestep/services/local_session.dart';
@@ -232,6 +233,16 @@ class _SettingsTile extends StatelessWidget {
       print('🗑️ [DELETE ACCOUNT] Committing batch deletion');
       await batch.commit();
       print('✅ [DELETE ACCOUNT] Batch deletion completed successfully');
+
+      // Stop shake detection service
+      print('🛑 [DELETE ACCOUNT] Stopping shake detection service');
+      try {
+        const platform = MethodChannel('com.example.safestep/shake_gesture');
+        await platform.invokeMethod('stopShakeDetection');
+        print('✅ [DELETE ACCOUNT] Shake detection service stopped');
+      } catch (e) {
+        print('⚠️ [DELETE ACCOUNT] Failed to stop shake detection service: $e');
+      }
 
       // Clear local session
       print('🗑️ [DELETE ACCOUNT] Clearing local session');

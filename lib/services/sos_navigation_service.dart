@@ -8,6 +8,7 @@ class SosNavigationService {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static bool _initialized = false;
   static bool _pendingSosOpen = false;
+  static bool _sosScreenActive = false;
 
   static void initialize() {
     if (_initialized) return;
@@ -20,8 +21,8 @@ class SosNavigationService {
   static Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'openSosScreen':
-        // Block SOS if gesture recording is in progress
-        if (!SosBlocker.blockSos) {
+        // Block SOS if gesture recording is in progress or SOS screen is already active
+        if (!SosBlocker.blockSos && !_sosScreenActive) {
           _openSosScreenQueued();
         }
         return null;
@@ -41,11 +42,15 @@ class SosNavigationService {
       return;
     }
     _pendingSosOpen = false;
+    _sosScreenActive = true;
     navigator.push(
       MaterialPageRoute(
         builder: (context) => const TenSecondPanicScreen(),
       ),
-    );
+    ).then((_) {
+      // Reset flag when SOS screen is closed
+      _sosScreenActive = false;
+    });
   }
 
   static void _tryOpenPending() {
@@ -57,4 +62,6 @@ class SosNavigationService {
   static void dispose() {
     // no-op: keeping channel handler for app lifetime
   }
+
+  static bool get isSosScreenActive => _sosScreenActive;
 }

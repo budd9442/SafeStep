@@ -16,6 +16,10 @@ import 'package:safestep/services/location_service.dart';
 import 'package:safestep/services/native_background_location_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:safestep/views/safe_chat_view.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<QuerySnapshot>? _inboxSubscription;
   StreamSubscription<QuerySnapshot>? _sharedLocationSubscription;
   final GlobalKey<MapViewState> _mapViewKey = GlobalKey<MapViewState>();
+  Map<String, Map<String, dynamic>> _sharedLocations = {};
 
 
   void _onNavTap(int index) {
@@ -65,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _listenToSharedLocations();
     _checkForExpiredSessions();
     _startAgentDataCollection();
+    _checkAndResumeLocationSharing();
     
     // Channel initialized globally in main.dart
   }
@@ -120,19 +126,19 @@ class _HomeScreenState extends State<HomeScreen> {
               sharedLocations[doc.id] = {
                 'userId': doc.id,
                 'name': data['name'] ?? 'Unknown',
-                'profileImageUrl': data['profileImageUrl'],
+                'profileImageUrl': data['profilePicUrl'] ?? data['profilePic'] ?? data['profileImageUrl'],
                 'latitude': lat,
                 'longitude': lng,
                 'timestamp': lastKnownLocation['timestamp'],
                 'accuracy': lastKnownLocation['accuracy'],
               };
-              print('✅ [SHARED LOCATIONS] Added location for user: ${doc.id} at $lat, $lng');
+              print('✅ [SHARED LOCATIONS] Added location for user: ${doc.id} at $lat, $lng, profileUrl: ${data['profilePicUrl'] ?? data['profilePic'] ?? data['profileImageUrl']}');
             }
           }
         }
         
         setState(() {
-          // _sharedLocations = sharedLocations; // Removed unused field
+          _sharedLocations = sharedLocations;
         });
         
         print('📍 [SHARED LOCATIONS] Updated: ${sharedLocations.length} users sharing location');
@@ -297,6 +303,148 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Check for expired sessions periodically
+  Future<void> _checkAndResumeLocationSharing() async {
+    try {
+      print('🔄 [HOME SCREEN] Checking if location sharing should be resumed...');
+      
+      final localUserId = await LocalSession.getCurrentUserId();
+      if (localUserId == null) {
+        print('⚠️ [HOME SCREEN] No local user ID found');
+        return;
+      }
+      
+      print('🔄 [HOME SCREEN] Local user ID: $localUserId');
+      
+      // Check if user was sharing location in Firebase
+      print('🔄 [HOME SCREEN] Fetching user document from Firebase...');
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(localUserId)
+          .get();
+      
+      print('🔄 [HOME SCREEN] Firebase document exists: ${userDoc.exists}');
+      
+      if (!userDoc.exists) {
+        print('⚠️ [HOME SCREEN] User document not found');
+        return;
+      }
+      
+      final userData = userDoc.data();
+      print('🔄 [HOME SCREEN] User data keys: ${userData?.keys.toList()}');
+      
+      final wasSharing = userData?['sharingLocation'] == true;
+      final shareContacts = userData?['shareLocationContacts'] as List<dynamic>? ?? [];
+      
+      print('🔄 [HOME SCREEN] Firebase sharing status: wasSharing=$wasSharing, contacts=${shareContacts.length}');
+      print('🔄 [HOME SCREEN] Raw sharingLocation value: ${userData?['sharingLocation']}');
+      print('🔄 [HOME SCREEN] Raw shareLocationContacts value: ${userData?['shareLocationContacts']}');
+      
+      if (wasSharing && shareContacts.isNotEmpty) {
+        print('✅ [HOME SCREEN] User was sharing location, checking backend session...');
+        
+        // Check if there's an active session in local database
+        final activeSession = await LocationDatabase.getActiveSession(localUserId);
+        
+        if (activeSession != null) {
+          print('🔄 [HOME SCREEN] Found local session: ${activeSession['session_id']}');
+          
+          // Check if session is still active on backend
+          final response = await LocationService.getSessionStatus(activeSession['session_id']);
+          
+          print('🔄 [HOME SCREEN] Backend session check: success=${response.success}, status=${response.sessionData?['status']}');
+          
+          if (response.success && 
+              response.sessionData?['status'] == 'active') {
+            print('✅ [HOME SCREEN] Backend session is active, resuming location tracking...');
+            
+            // Resume background location tracking
+            print('🔄 [HOME SCREEN] Attempting to start native background service...');
+            final trackingStarted = await NativeBackgroundLocationService.startTracking(sessionId: activeSession['session_id']);
+            
+            if (trackingStarted) {
+              print('✅ [HOME SCREEN] Location sharing resumed successfully');
+            } else {
+              print('❌ [HOME SCREEN] Failed to start native background service');
+            }
+          } else {
+            print('⚠️ [HOME SCREEN] Backend session is not active, cleaning up...');
+            
+            // Clean up inactive session
+            await LocationDatabase.endSession(activeSession['session_id']);
+            
+            // Update Firebase to reflect stopped sharing
+            await FirebaseFirestore.instance.collection('users').doc(localUserId).set({
+              'sharingLocation': false,
+              'shareLocationContacts': [],
+              'shareLocationDuration': null,
+              'shareLocationUpdatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+          }
+        } else {
+          print('⚠️ [HOME SCREEN] No active local session found, but Firebase shows sharing - creating new session...');
+          
+          // User was sharing but no local session - this means the app was restarted
+          // We need to create a new session and start tracking
+          try {
+            // Get current location
+            final currentLocation = await LocationService.getCurrentLocation();
+            if (currentLocation == null) {
+              print('❌ [HOME SCREEN] Could not get current location for resume');
+              return;
+            }
+            
+            // Create new session
+            final clientId = LocationService.generateClientId();
+            final startResponse = await LocationService.startLocationSharing(
+              clientId: clientId,
+              phoneNumber: 'tel:$localUserId',
+              metadata: {
+                'startedBy': 'resume_after_restart',
+                'purpose': 'share_location_with_contacts',
+                'contactIds': shareContacts,
+                'duration': 1,
+                'flutterApp': true,
+              },
+            );
+            
+            if (startResponse.success && startResponse.sessionId != null) {
+              print('✅ [HOME SCREEN] New session created for resume: ${startResponse.sessionId}');
+              
+              // Save session to local database
+              await LocationDatabase.createSession(
+                sessionId: startResponse.sessionId!,
+                userId: localUserId,
+                clientId: clientId,
+                phoneNumber: 'tel:$localUserId',
+                metadata: jsonEncode({
+                  'contactIds': shareContacts,
+                  'resumed': true,
+                }),
+              );
+              
+              // Start native background tracking
+              final trackingStarted = await NativeBackgroundLocationService.startTracking(sessionId: startResponse.sessionId!);
+              
+              if (trackingStarted) {
+                print('✅ [HOME SCREEN] Location sharing resumed with new session');
+              } else {
+                print('❌ [HOME SCREEN] Failed to start native service with new session');
+              }
+            } else {
+              print('❌ [HOME SCREEN] Failed to create new session for resume');
+            }
+          } catch (e) {
+            print('❌ [HOME SCREEN] Error creating new session for resume: $e');
+          }
+        }
+      } else {
+        print('ℹ️ [HOME SCREEN] User was not sharing location');
+      }
+    } catch (e) {
+      print('❌ [HOME SCREEN] Error checking and resuming location sharing: $e');
+    }
+  }
+
   void _checkForExpiredSessions() {
     // Check every 30 seconds for expired sessions
     Timer.periodic(const Duration(seconds: 30), (timer) async {
@@ -503,6 +651,60 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _startFakeCall() async {
+    try {
+      // Request phone permission
+      final status = await Permission.phone.status;
+      if (!status.isGranted) {
+        await Permission.phone.request();
+      }
+
+      // Default values for the fake call
+      const callerName = 'SafeStep';
+      const callerNumber = '1234567890';
+      const audioAsset = 'assets/music.mp3';
+
+      // Copy audio asset to cache
+      String? audioPath;
+      if (audioAsset.isNotEmpty) {
+        final byteData = await rootBundle.load(audioAsset);
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/${audioAsset.split('/').last}');
+        await file.writeAsBytes(byteData.buffer.asUint8List());
+        audioPath = file.path;
+      }
+
+      // Trigger fake call via method channel
+      const platform = MethodChannel('com.example.safestep/fakecall');
+      await platform.invokeMethod('triggerFakeCall', {
+        'callerName': callerName,
+        'callerNumber': callerNumber,
+        'audioPath': audioPath ?? '',
+      });
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Starting fake call from SafeStep...'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ [FAKE CALL] Error starting fake call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start fake call: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
@@ -526,33 +728,44 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Share location card at top
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .where('isAuthenticated', isEqualTo: true)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    child: FutureBuilder<String?>(
+                      future: LocalSession.getCurrentUserId(),
+                      builder: (context, userIdSnapshot) {
+                        if (!userIdSnapshot.hasData || userIdSnapshot.data == null) {
                           return ShareLocationCard(
                             onShare: () => _showShareLocationSheet(context),
                             onLocationIconTap: null,
                           );
                         }
-                        final userDoc = snapshot.data!.docs.first;
-                        final data = userDoc.data() as Map<String, dynamic>?;
-                        final sharing = data != null && data['sharingLocation'] == true;
-                        if (sharing) {
-                          final List contacts = (data['shareLocationContacts'] ?? []) as List;
-                          return ActiveShareLocationPanel(
-                            contactIds: contacts.cast<String>(),
-                            onLocationIconTap: null,
-                          );
-                        } else {
-                          return ShareLocationCard(
-                            onShare: () => _showShareLocationSheet(context),
-                            onLocationIconTap: null,
-                          );
-                        }
+                        final userId = userIdSnapshot.data!;
+                        return StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(userId)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData || !snapshot.data!.exists) {
+                              return ShareLocationCard(
+                                onShare: () => _showShareLocationSheet(context),
+                                onLocationIconTap: null,
+                              );
+                            }
+                            final data = snapshot.data!.data() as Map<String, dynamic>?;
+                            final sharing = data != null && data['sharingLocation'] == true;
+                            if (sharing) {
+                              final List contacts = (data['shareLocationContacts'] ?? []) as List;
+                              return ActiveShareLocationPanel(
+                                contactIds: contacts.cast<String>(),
+                                onLocationIconTap: null,
+                              );
+                            } else {
+                              return ShareLocationCard(
+                                onShare: () => _showShareLocationSheet(context),
+                                onLocationIconTap: null,
+                              );
+                            }
+                          },
+                        );
                       },
                     ),
                   ),
@@ -580,6 +793,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             loading: _loading,
                             error: _error,
                             dangerZones: _dangerZones.isEmpty ? null : _dangerZones,
+                            sharedLocations: _sharedLocations.isEmpty ? null : _sharedLocations,
                             onDangerZoneTap: _onDangerZoneTap,
                           ),
                         ),
@@ -598,14 +812,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'Fake Call',
                             subtitle: 'Simulate call',
                             color: Colors.green,
-                            onTap: () {
-                              // TODO: Implement fake call functionality
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Fake Call feature coming soon!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                            onTap: () async {
+                              // Start fake call directly with default values
+                              await _startFakeCall();
                             },
                           ),
                         ),
@@ -696,9 +905,30 @@ class _ActiveShareLocationPanelState extends State<ActiveShareLocationPanel> {
       // Get active session from SQLite
       final activeSession = await LocationDatabase.getActiveSession(localUserId);
       if (activeSession != null) {
+        final String sessionId = activeSession['session_id'];
         // End session in SQLite
-        await LocationDatabase.endSession(activeSession['session_id']);
-        print('✅ [STOP SHARING] SQLite session ended: ${activeSession['session_id']}');
+        await LocationDatabase.endSession(sessionId);
+        print('✅ [STOP SHARING] SQLite session ended: $sessionId');
+
+        // Stop on backend
+        try {
+          final stopResp = await LocationService.stopLocationSharing(sessionId: sessionId);
+          if (!stopResp.success) {
+            print('⚠️ [STOP SHARING] Backend stop failed: ${stopResp.code} ${stopResp.message}');
+          } else {
+            print('✅ [STOP SHARING] Backend session stopped');
+          }
+        } catch (e) {
+          print('❌ [STOP SHARING] Backend stop error: $e');
+        }
+
+        // Stop native background tracking
+        try {
+          await NativeBackgroundLocationService.stopTracking();
+          print('✅ [STOP SHARING] Native background tracking stopped');
+        } catch (e) {
+          print('❌ [STOP SHARING] Failed to stop native tracking: $e');
+        }
       }
 
       // Update Firebase with sharing status
