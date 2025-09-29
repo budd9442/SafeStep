@@ -598,7 +598,7 @@ class EmergencyContactsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emergencyContacts = [
-      {'name': 'Women Helpline', 'phone': '1938'},
+      {'name': 'Women Emergency Helpline', 'phone': '1938'},
       {'name': 'Police Maharagama', 'phone': '0112 850 222'},
       {'name': 'Women in Need', 'phone': '+94112671411'},
       {'name': 'Legal aid against gender-based violence - regional centre Nugegoda', 'phone': '+94112809068'},
