@@ -60,6 +60,13 @@ It enables users to send instant SOS alerts, share live location, access safety 
 
 ---
 
+## 📡 Links
+
+- **SafeStep Introduction Website GitHub**: [https://github.com/ThasuniInduma/safestep](https://github.com/ThasuniInduma/safestep/edit/master/README.md)  
+- **Demo Video on YouTube**: [https://www.youtube.com/embed/9OXSl0eOqj8](https://www.youtube.com/embed/9OXSl0eOqj8)  
+
+---
+
 ## 📲 Screenshots
 <table>
   <tr>
