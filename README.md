@@ -123,14 +123,29 @@ It enables users to send instant SOS alerts, share live location, access safety 
    ```
 
 2. **Configure Secrets** ⚠️
-   Set up required API keys and credentials:
-   - Create `backend/service.json` (Firebase service account)
-   - Create `android/app/google-services.json` (Firebase Android config)
-   - Create `lib/firebase_options.dart` (run `flutterfire configure`)
-   - Create `.env` with `GEMINI_API_KEY`
-   - Add Google Maps API key to `AndroidManifest.xml`
 
-   📖 See [SECRETS_SETUP.md](SECRETS_SETUP.md) for detailed instructions.
+   **Firebase Setup:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Download `google-services.json` → place in `android/app/`
+   - Download service account JSON → save as `backend/service.json`
+   - Install FlutterFire CLI: `dart pub global activate flutterfire_cli`
+   - Run: `flutterfire configure` (generates `lib/firebase_options.dart`)
+
+   **API Keys:**
+   - Get [Gemini API key](https://makersuite.google.com/app/apikey) → create `.env` file:
+     ```env
+     GEMINI_API_KEY=your_api_key_here
+     ```
+   - Get [Google Maps API key](https://console.cloud.google.com/) → update `android/app/src/main/AndroidManifest.xml`:
+     ```xml
+     <meta-data android:name="com.google.android.geo.API_KEY" android:value="YOUR_KEY" />
+     ```
+
+   **Backend Environment:**
+   - Create `backend/.env` with Firebase credentials and MSpace config
+   - Use `backend/.env.example` as template
+
+   📖 Full guide: [SECRETS_SETUP.md](SECRETS_SETUP.md)
 
 3. **Install Dependencies**
    ```bash
