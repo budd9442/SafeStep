@@ -72,7 +72,7 @@ It enables users to send instant SOS alerts, share live location, access safety 
   <tr>
     <td>
       <figure>
-        <img src="images/1.png" alt="1" width="700" height="300"/>
+        <img src="images/3.png" alt="1" width="700" height="300"/>
         <figcaption>Create Profile</figcaption>
       </figure>
     </td>
