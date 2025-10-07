@@ -121,11 +121,24 @@ It enables users to send instant SOS alerts, share live location, access safety 
    git clone https://github.com/budd9442/SafeStep.git
    cd safestep
    ```
-2. **Install Dependencies**
+
+2. **Configure Secrets** ⚠️
+   Set up required API keys and credentials:
+   - Create `backend/service.json` (Firebase service account)
+   - Create `android/app/google-services.json` (Firebase Android config)
+   - Create `lib/firebase_options.dart` (run `flutterfire configure`)
+   - Create `.env` with `GEMINI_API_KEY`
+   - Add Google Maps API key to `AndroidManifest.xml`
+
+   📖 See [SECRETS_SETUP.md](SECRETS_SETUP.md) for detailed instructions.
+
+3. **Install Dependencies**
    ```bash
    flutter pub get
+   cd backend && npm install
    ```
-3. **Run the App**
+
+4. **Run the App**
    ```bash
    flutter run
    ```
