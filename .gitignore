@@ -46,3 +46,14 @@ app.*.map.json
 
 # Environment variable file
 .env
+
+# Firebase & Google Services (contains API keys)
+android/app/google-services.json
+google-services.json
+firebase_options.dart
+lib/firebase_options.dart
+
+# Service account credentials
+backend/service.json
+service.json
+**/service-account.json
