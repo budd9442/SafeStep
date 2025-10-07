@@ -17,11 +17,9 @@ It enables users to send instant SOS alerts, share live location, access safety 
 
 - 🆘 **One-Tap SOS** – Instantly send alerts with live location to emergency contacts.  
 - 📍 **Real-Time Tracking** – Share your live location with trusted guardians.  
-- 🤖 **AI Safety Suggestions** – Smart route recommendations for safer travel.  
+- 🤖 **AI Safety Bot** – AI-powered agent chatbot for instant guidance.  
 - 📞 **Emergency Hotlines** – Direct access to local police, ambulance, and help lines.  
-- 🎙️ **Voice/Shake Activation** – Trigger SOS without unlocking your phone.  
-- 📸 **Auto Recording Mode (Panic Mode)** – Records audio/video and uploads to cloud.  
-- 🫱 **Safe Community** – Connect with verified nearby SafeStep users for help.  
+- 🤚 **Shake Activation** – Trigger SOS without unlocking your phone.  
 - 🎭 **Fake Call** – Simulate an incoming call to escape uncomfortable situations.  
 - 🔒 **Privacy First** – End-to-end encryption for all sensitive user data.
 
